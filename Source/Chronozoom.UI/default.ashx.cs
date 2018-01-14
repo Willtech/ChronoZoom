@@ -14,23 +14,26 @@ using System.Web;
 using System.Xml;
 using System.Xml.Linq;
 using System.Xml.XPath;
-
+using System.Text.RegularExpressions;
 
 namespace Chronozoom.UI
 {
     public class PageInformation
     {
-
-        public PageInformation()
-        {
-            AnalyticsServiceId = ConfigurationManager.AppSettings["AnalyticsServiceId"];
-            ExceptionsServiceId = ConfigurationManager.AppSettings["ExceptionsServiceId"];
-            Images = new List<string>();
-        }
-
-        public string AnalyticsServiceId { get; set; }
-
-        public string ExceptionsServiceId { get; set; }
+        public string AnalyticsServiceId    { get; private set; }
+        public bool   AirbrakeTrackServer   { get; private set; }
+        public bool   AirbrakeTrackClient   { get; private set; }
+        public string AirbrakeProjectId     { get; private set; }
+        public string AirbrakeProjectKey    { get; private set; }
+        public string AirbrakeEnvironment   { get; private set; }
+        public string FeaturedContentList   { get; private set; }
+        public string OneDriveClientID      { get; private set; }
+        public bool   UseMergedJSFiles      { get; private set; }
+        public bool   UseMinifiedJSFiles    { get; private set; }
+        public string CSSFileVersion        { get; private set; }
+        public string JSFileVersion         { get; private set; }
+        public string JSMinFileVersion      { get; private set; }
+        public string SchemaVersion         { get; private set; }
 
         [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
         public string Title { get; set; }
@@ -40,6 +43,66 @@ namespace Chronozoom.UI
 
         [SuppressMessage("Microsoft.Design", "CA1002:DoNotExposeGenericLists")]
         public List<string> Images { get; private set; }
+
+        // constructor
+        public PageInformation()
+        {
+            AnalyticsServiceId  = ConfigurationManager.AppSettings["AnalyticsServiceId"];
+            AirbrakeTrackClient = ConfigurationManager.AppSettings["Airbrake.TrackClient"       ].ToLower() == "true" ? true : false;
+            AirbrakeProjectId   = AirbrakeTrackClient ? ConfigurationManager.AppSettings["Airbrake.ProjectId"   ] : "";
+            AirbrakeProjectKey  = AirbrakeTrackClient ? ConfigurationManager.AppSettings["Airbrake.ApiKey"      ] : "";
+            AirbrakeEnvironment = ConfigurationManager.AppSettings["Airbrake.Environment"       ]; if (AirbrakeEnvironment == "") AirbrakeEnvironment = "development";
+            FeaturedContentList = ConfigurationManager.AppSettings["FeaturedContentListLocation"]; if (FeaturedContentList == "") FeaturedContentList = "/featured/featured.json";
+            OneDriveClientID    = ConfigurationManager.AppSettings["OneDriveClientID"];
+            UseMergedJSFiles    = ConfigurationManager.AppSettings["UseMergedJavaScriptFiles"   ].ToLower() == "true" ? true : false;
+            UseMinifiedJSFiles  = ConfigurationManager.AppSettings["UseMinifiedJavaScriptFiles" ].ToLower() == "true" ? true : false;
+            CSSFileVersion      = GetFileVersion("/css/cz.min.css");
+            JSFileVersion       = GetFileVersion("/cz.merged.js");
+            JSMinFileVersion = GetFileVersion("/czmin.merged.js");
+            SchemaVersion       = GetLastSchemaUpdate();
+            Images              = new List<string>();
+        }
+
+        /// <summary>
+        /// Used to obtain a versioning value that can be used in a query string when linking static content such as .js and .css files.
+        /// The versioning value changes every time the file is changed, and can be used so that browsers do not need to be manually refreshed by users when static content changes.
+        /// For example, x.js?v=2014-12-31--17-30 is seen by browsers as a different file compared to x.js?v2015-01-01--00-00.
+        /// It should be noted that this particular approach is not be suitable for a web farm unless sticky IPs are used on the load balancer.
+        /// </summary>
+        /// <param name="webPath">Optional path to static content file such as .js or .css file. Leave blank to use assembly build date/time.</param>
+        /// <returns>GMT/UTC string based off of file creation date and time.</returns>
+        private string GetFileVersion(string webPath = "")
+        {
+            DateTime rv;
+
+            if (webPath == "")
+            {
+                // use assembly date/time (from when last built)
+                rv = File.GetCreationTime(System.Reflection.Assembly.GetExecutingAssembly().Location).ToUniversalTime();
+            }
+            else
+            {
+                // get date/time from file specified in webPath
+                FileInfo info = new FileInfo(HttpContext.Current.Server.MapPath(webPath));
+                rv = info.LastWriteTimeUtc;
+            }
+
+            return rv.ToString("yyyy-MM-dd--HH-mm-ss");
+        }
+
+        /// <summary>
+        /// Used to obtain a string that is unique for each version of the db schema.
+        /// When importing a saved timeline, this is used to ensure that the timeline being imported
+        /// was created under the same version of the db schema as is currently being run.
+        /// </summary>
+        /// <returns>A multipart string that includes a date prefix, but no need to break down further.</returns>
+        private string GetLastSchemaUpdate()
+        {
+            using (Entities.Version version = new Entities.Version())
+            {
+                return version.LastUpdate();
+            }
+        }
     }
 
     /// <summary>
@@ -48,12 +111,13 @@ namespace Chronozoom.UI
     public class DefaultHttpHandler : IHttpHandler
     {
         private const string _mainPageName = @"cz.html";
+        private const string _minifiedPageName = @"czmin.html";
         private static readonly Storage _storage = new Storage();
 
         private static readonly Lazy<string> _mainPage = new Lazy<string>(() =>
             {
-                PageInformation pageInforamtion = new PageInformation();
-                return GenerateDefaultPage(pageInforamtion);
+                PageInformation pageInformation = new PageInformation();
+                return GenerateDefaultPage(pageInformation);
             });
 
         private static Lazy<string> _hostPath = new Lazy<string>(() =>
@@ -78,78 +142,109 @@ namespace Chronozoom.UI
             context.Response.ContentType = "text/html";
 
             PageInformation pageInformation;
-            if (PageIsDynamic(HttpContext.Current.Request.Url, out pageInformation))
+            string page = _mainPageName;
+            bool isMinified = false; 
+            var uri = HttpContext.Current.Request.Url;
+                //if we need minified version of ChronoZoom
+            
+            if (uri.Segments[1] == "czmin/")
             {
-                context.Response.Write(GenerateDefaultPage(pageInformation));
+                page = _minifiedPageName;
+                isMinified = true;
+                // we need ChronoZoom to think it works as usual
+                string uriString = uri.OriginalString;
+                uriString = uriString.Remove(uriString.IndexOf("/czmin"),"/czmin".Length);
+                uri = new Uri(uriString);
+            }
+            bool isDynamic = PageIsDynamic(uri,out pageInformation);
+            if (isDynamic || isMinified)
+            {          
+                context.Response.Write(GenerateDefaultPage(pageInformation, page));
             }
             else
             {
                 context.Response.Write(_mainPage.Value);
             }
+            
         }
 
-        private static bool PageIsDynamic(Uri pageUrl, out PageInformation pageInformation)
+        private static bool PageIsDynamic(Uri pageUrl, out PageInformation pageInformation, bool isMinimized = false)
         {
             pageInformation = new PageInformation();
-            if (pageUrl.Segments.Length <= 1 ||
-                pageUrl.ToString().EndsWith("default.ashx", StringComparison.OrdinalIgnoreCase))
-                return false;
 
-            string superCollection = string.Empty;
-            if (pageUrl.Segments.Length >= 2)
-                superCollection = pageUrl.Segments[1].Split('/')[0];
-
-            string collection = superCollection;
-            if (pageUrl.Segments.Length >= 3)
-                collection = pageUrl.Segments[2].Split('/')[0];
-
-            if (IsSuperCollectionPresent(superCollection))
+            // if the home page was specified
+            if
+            (
+                pageUrl.Segments.Length == 1 ||
+                pageUrl.ToString().EndsWith("default.ashx", StringComparison.OrdinalIgnoreCase)
+            )
             {
+                // then exit reporting page is not dynamic
+                return false;
+            }
 
-                Timeline timeline = ChronozoomSVC.Instance.GetTimelines(superCollection, collection, null, null, null, null, null, "1");
-                if (timeline != null)
+            // home page was not specified so ascertain the superCollection title and collection Path from the URL
+            string superCollectionSegment =
+                Regex.Replace(pageUrl.Segments[1].Trim(), @"[^A-Za-z0-9\-]+", "").ToLower();
+
+            string collectionSegment = pageUrl.Segments.Length < 3 ? "" :
+                Regex.Replace(pageUrl.Segments[2].Trim(), @"[^A-Za-z0-9\-]+", "").ToLower();
+
+            // try to look up collection id
+            Guid collectionId = ChronozoomSVC.Instance.CollectionIdOrDefault(_storage, superCollectionSegment, collectionSegment);
+
+            // if collection id could not be found
+            if (collectionId == Guid.Empty)
+            {
+                // if collection segment was specified (and also the supercollection segment)
+                if (collectionSegment != "")
                 {
+                    // redirect to the default collection for the specified supercollection
+                    if (isMinimized)
+                        HttpContext.Current.Response.Redirect("/czmin/" + superCollectionSegment + "#");
+                    else
+                        HttpContext.Current.Response.Redirect("/" + superCollectionSegment + "#");
+                    return false;
+                }
 
-                    pageInformation.Title = timeline.Title;
+                // otherwise redirect to the default supercollection's default collection
+                if(isMinimized)
+                   HttpContext.Current.Response.Redirect("/czmin/#");
+                else
+                    HttpContext.Current.Response.Redirect("/#");
 
-                    foreach (Exhibit exhibit in timeline.Exhibits)
+                return false;
+            }
+
+            // set page title to collection title (must be server-side and not through JS for SEO purposes)
+            pageInformation.Title = (ChronozoomSVC.Instance.GetCollection(superCollectionSegment, collectionSegment)).Title;
+
+            // collection id was found so try to get root timeline and its accoutriments
+            Timeline timeline = ChronozoomSVC.Instance.GetTimelines(superCollectionSegment, collectionSegment, null, null, null, null, null, "1");
+            if (timeline == null)
+            {
+                // a timeline for this collection could not be found so exit reporting page is not dynamic
+                return false;
+            }
+
+            // timeline was found so populate rest of page contents and report page is dynamic
+            foreach (Exhibit exhibit in timeline.Exhibits)
+            {
+                foreach (ContentItem contentItem in exhibit.ContentItems)
+                {
+                    if (contentItem.Uri.ToString().EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
                     {
-                        foreach (ContentItem contentItem in exhibit.ContentItems)
-                        {
-                            if (contentItem.Uri.ToString().EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
-                            {
-                                pageInformation.Images.Add(contentItem.Uri);
-                            }
-                        }
+                        pageInformation.Images.Add(contentItem.Uri);
                     }
-
-                    return true;
                 }
             }
 
-            return false;
-
+            return true;
         }
 
         /// <summary>
-        /// Validates if a supercollection is present.
+        /// Not referenced by CZ but still required for DefaultHttpHandler.
         /// </summary>
-        /// <param name="superCollection"></param>
-        /// <returns>Boolean value</returns>
-        public static bool IsSuperCollectionPresent(string superCollection)
-        {
-            string _superCollection = FriendlyUrl.FriendlyUrlDecode( superCollection);
-            if (_storage.SuperCollections.Any(candidate => candidate.Title.ToLower() == _superCollection ))
-            {
-                return true;
-            }
-            else
-            {
-                HttpContext.Current.Response.Redirect("/");
-                return false;
-            }
-        }
-
         public bool IsReusable
         {
             get
@@ -158,11 +253,11 @@ namespace Chronozoom.UI
             }
         }
 
-        internal static string GenerateDefaultPage(PageInformation pageInformation)
+        internal static string GenerateDefaultPage(PageInformation pageInformation, string pageName = _mainPageName)
         {
             try
             {
-                using (StreamReader streamReader = new StreamReader(_baseDirectory.Value + _mainPageName))
+                using (StreamReader streamReader = new StreamReader(_baseDirectory.Value + pageName))
                 {
                     XmlReader xmlReader = new XmlTextReader(streamReader);
                     XDocument pageRoot = XDocument.Load(xmlReader);
@@ -213,9 +308,19 @@ namespace Chronozoom.UI
         {
             XElement scriptNode = pageRoot.XPathSelectElement("/xhtml:html/xhtml:head/xhtml:script[@id='constants']", xmlNamespaceManager);
             scriptNode.Value = "var constants = { " +
-                "analyticsId: \"" + pageInformation.AnalyticsServiceId + "\", " +
-                "exceptionsId: \"" + pageInformation.ExceptionsServiceId + "\", " +
-                "environment: \"" + CurrentEnvironment.ToString() + "\" " +
+                "analyticsId: \""           + pageInformation.AnalyticsServiceId                        + "\", " +
+                "airbrakeTrackClient: "     + pageInformation.AirbrakeTrackClient.ToString().ToLower()  + ", "   +
+                "airbrakeProjectId: \""     + pageInformation.AirbrakeProjectId                         + "\", " +
+                "airbrakeProjectKey: \""    + pageInformation.AirbrakeProjectKey                        + "\", " +
+                "airbrakeEnvironment: \""   + pageInformation.AirbrakeEnvironment                       + "\", " +
+                "featuredContentList: \""   + pageInformation.FeaturedContentList                       + "\", " +
+                "onedriveClientId: \""      + pageInformation.OneDriveClientID                          + "\", " +
+                "useMergedJSFiles: "        + pageInformation.UseMergedJSFiles.ToString(  ).ToLower()   +   ", " +
+                "useMinifiedJSFiles: "      + pageInformation.UseMinifiedJSFiles.ToString().ToLower()   +   ", " +
+                "cssFileVersion: \""        + pageInformation.CSSFileVersion                            + "\", " +
+                "jsFileVersion: \""         + pageInformation.JSFileVersion                             + "\", " +
+                "schemaVersion: \""         + pageInformation.SchemaVersion                             + "\", " +
+                "environment: \""           + CurrentEnvironment.ToString()                             + "\"  " +
                 "};";
 
             if (!string.IsNullOrEmpty(pageInformation.Title))

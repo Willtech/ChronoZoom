@@ -34,6 +34,7 @@ Ankh.NoLoad
 UpgradeLog*
 _UpgradeReport_Files/
 PublishProfiles/
+App_Data/
 
 #MonoDevelop
 *.pidb
@@ -66,7 +67,6 @@ packages/
 *.dbmdl
 
 #Test files
-*.testsettings
 *_Chutzpah*
 *Test/chronozoom20.test/Tests.BL/Scripts/Js/*
 *Test/chronozoom20.test/Tests.BL/Scripts/Utils/*

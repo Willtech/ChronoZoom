@@ -1,22 +1,18 @@
-﻿// --------------------------------------------------------------------------------------------------------------------
-// <copyright company="Outercurve Foundation">
-//   Copyright (c) 2013, The Outercurve Foundation
-// </copyright>
-// --------------------------------------------------------------------------------------------------------------------
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Microsoft.IdentityModel.Web;
+using System.Configuration;
 using System.ServiceModel.Activation;
 using System.Web;
 using System.Web.Compilation;
 using System.Web.Mvc;
+using System.Web.Optimization;
 using System.Web.Routing;
 using System.Web.UI;
 using Chronozoom.Entities;
 using OuterCurve;
-using Microsoft.IdentityModel.Web;
-
+using SharpBrake;
 
 namespace Chronozoom.UI
 {
@@ -95,8 +91,24 @@ namespace Chronozoom.UI
             RouteTable.Routes.MapHubs();
             RegisterRoutes(RouteTable.Routes);
 
-            Trace.TraceInformation("Application Starting");
+            BundleTable.EnableOptimizations = true; // enables bundling for debug mode
+            BundleConfig.RegisterBundles(BundleTable.Bundles);
 
+            Trace.TraceInformation("Checking Db Schema");
+            using (Entities.ManualMigrationCheck check = new Entities.ManualMigrationCheck())
+            {
+                if (check.NewInstall)
+                {
+                    Trace.TraceInformation("New Install - Populating Initial Db Content");
+                    using (Utils.PopulateDbFromJSON populator = new Utils.PopulateDbFromJSON())
+                    {
+                        populator.ImportCollection("ChronoZoom", "Cosmos",        "cz.cosmos.json",       true,  true, true);
+                        populator.ImportCollection("ChronoZoom", "AIDS Timeline", "cz.aidstimeline.json", false, true, true);
+                    }
+                }
+            }
+
+            Trace.TraceInformation("Application Starting");
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
@@ -121,6 +133,8 @@ namespace Chronozoom.UI
 
         public void Application_Error(object sender, EventArgs e)
         {
+            Exception lastError = Server.GetLastError();
+            if (ConfigurationManager.AppSettings["Airbrake.TrackServer"].ToLower() == "true") lastError.SendToAirbrake();
         }
 
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]

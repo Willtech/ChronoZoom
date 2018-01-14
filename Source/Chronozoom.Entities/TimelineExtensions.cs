@@ -11,17 +11,38 @@ namespace Chronozoom.Entities
     {
         public static void Traverse(this Timeline timeline, TraverseOperation operation)
         {
-            if (operation ==null || timeline == null)
-                return;
+            if (operation == null || timeline == null) return;
 
             operation(timeline);
-            if (timeline.ChildTimelines != null)
+            if (timeline.ChildTimelines == null) return;
+
+            foreach (Timeline childTimeline in timeline.ChildTimelines)
             {
-                foreach (Timeline childTimeline in timeline.ChildTimelines)
+                Traverse(childTimeline, operation);
+            }
+        }
+
+        /// <summary></summary>
+        /// <param name="descendant"></param>
+        /// <returns>A list of all ancestor timelines which also includes the current timeline.</returns>
+        public static List<Guid> Ancestors(this Timeline descendant)
+        {
+            List<Guid> rv = new List<Guid>();
+
+            Timeline timeline = descendant;
+            Guid[] searchTerm;
+
+            using (Storage storage = new Storage())
+            {
+                while (timeline != null)
                 {
-                    Traverse(childTimeline, operation);
+                    rv.Add(timeline.Id);
+                    searchTerm = new Guid[] { timeline.Id };
+                    timeline = storage.Timelines.Where(t => t.ChildTimelines.Any(ct => searchTerm.Contains(ct.Id))).FirstOrDefault(); // get parent if exists
                 }
             }
+
+            return rv;
         }
     }
 }

@@ -1,17 +1,25 @@
-@import "timescale";
+@import url(http://fonts.googleapis.com/css?family=Arizonia);
+@import "_colors";
+@import "_mixins";
+@import "audio";
 @import "datepicker";
 @import "media";
+@import "menus";
+@import "overlay";
+@import "timescale";
 
-@headerHeight: 36px; /* The height of the page header */
-@headerLogoWidth: 170px; /* The width of the logo area */
-@headerTourWidth: 140px; /* The width of the tour player area */
-@headerRegimesWidth: 420px; /* The width of the regimes area */
-@headerBreadcrumbsHeight: 25px; /* The height of the breadcrumbs area */
-@headerBreadcrumbsTopMargin:8px;  /* The top margin of the bref.adcrumbs area */
-@headerBreadcrumbsScrollWidth: 25px; /* The breadcrumbs scroller area */
-
-@footerHeight: 25px; /* The height of the page footer */
-@footerLinksWidth: 350px; /* The width of the footers links area */
+@defaultBackgroundColor:        #232323;    /* The main background color for the page */
+@headerHeight:                  36px;       /* The height of the page header */
+@headerLogoWidth:               170px;      /* The width of the logo area */
+@headerTourWidth:               140px;      /* The width of the tour player area */
+@headerRegimesWidth:            420px;      /* The width of the regimes area */
+@headerBreadcrumbsHeight:       25px;       /* The height of the breadcrumbs area */
+@headerBreadcrumbsTopMargin:    8px;        /* The top margin of the bref.adcrumbs area */
+@headerBreadcrumbsScrollWidth:  25px;       /* The breadcrumbs scroller area */
+@footerHeight:                  25px;       /* The height of the page footer */
+@footerLinksWidth:              350px;      /* The width of the footers links area */
+@footerBackgroundColor:         #2a283a;
+@footerBorderColor:             #131432;
 
 html, body
 {
@@ -25,9 +33,47 @@ body
     overflow: hidden;
     min-width: 250px;
     min-height: 250px;
-    background-color: #232323;
-    font-family: 'Segoe UI', Helvetica, Arial, 'Trebuchet MS', San Serif;
+    background-color: @defaultBackgroundColor;
+    font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, 'Trebuchet MS', sans-serif;
     -ms-touch-action: none;
+}
+
+#splash
+{
+    position:       absolute;
+    top:            35px;
+    bottom:         25px;
+    left:           0;
+    right:          0;
+    padding-top:    200px;
+    background:     @defaultBackgroundColor;
+    color:          #91895c;
+    font-family:    Georgia, Times, 'Times New Roman', serif;
+    font-size:      2em;
+    font-style:     italic;
+    text-align:     center;
+    z-index:        2000;
+}
+
+.small
+{
+    color: #666;
+    font-size: 0.7em;
+}
+
+fieldset
+{
+    border: 2px #c7c7c7 solid;
+    legend
+    {
+        color: #666;
+    }
+}
+
+.field-block
+{
+    display: block;
+    width: 100%;
 }
 
 a
@@ -36,21 +82,54 @@ a
     text-decoration: none;
 }
 
-    a:hover
-    {
-        color: #fff;
-    }
+a:hover
+{
+    color: #fff;
+}
 
-    a:active
-    {
-        color: #fff;
-    }
+a:active
+{
+    color: #fff;
+}
 
-    a:visited
+a:visited
+{
+    color: #fff;
+    text-decoration: none;
+}
+
+/* Loading Hourglass */
+#wait
+{
+    display: block;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    text-align: center;
+    margin-top: 100px;
+    z-index: 2001;
+}
+
+a.help-link
+{
+    color: #25a1ea !important;
+    float: right;
+    font-size: 0.7em;
+    margin-left: 10px;
+    margin-top: 5px;
+
+    &:hover
     {
-        color: #fff;
-        text-decoration: none;
+        color: #0464a2 !important;
     }
+}
+
+div.preview
+{
+    padding: 0px 10px 0px 10px;
+    opacity: 0.7;
+}
 
 /***********************************************************
 
@@ -67,26 +146,58 @@ a
     -webkit-box-sizing: border-box;
     -moz-box-sizing: border-box;
     box-sizing: border-box;
-}
 
-    .navigation ul
+    ul
     {
         overflow: hidden;
         margin: 0;
         padding: 0;
         list-style: none;
         height: 100%;
-    }
 
-        .navigation ul li
+        li
         {
             height: 100%;
-        }
 
-        .navigation ul:after
-        {
-            clear: both;
+            &:after
+            {
+                clear: both;
+            }
         }
+    }
+}
+
+.header-logo
+{
+    height: @headerHeight;
+    line-height: @headerHeight;
+    width: @headerLogoWidth;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image: url('/images/chronozoom.png');
+    margin-left: 3px;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.header-regimes
+{
+    .transition(opacity @fade-duration ease-in-out, visibility @fade-duration ease-in-out);
+    height: @headerHeight;
+    width: @headerRegimesWidth;
+    display: none;
+    z-index: 1;
+}
+// Disable regimes if they don't fit devices.
+@media only screen and (max-width: 780px)
+{
+    .header-regimes
+    {
+        height: @headerHeight;
+        width: 0px;
+        display: none;
+    }
+}
 
 .regime-link
 {
@@ -97,10 +208,11 @@ a
     line-height: 36px;
 }
 
-    .regime-link:hover
-    {
-        cursor: pointer;
-    }
+.regime-link:hover
+{
+    cursor: pointer;
+    text-shadow: 0px 0px 15px #ccc;
+}
 
 #regime-link-cosmos
 {
@@ -127,160 +239,12 @@ a
     color: #66D5BF;
 }
 
-#login-panel
-{
-    height: 100%;
-    color: #E9E9E9 !important;
-    font-size: medium 14px;
-}
-
-    #login-panel label
-    {
-        display: inline-block;
-        margin-top: 8px;
-        margin-left: 10px;
-        color: #E9E9E9;
-        vertical-align: top;
-    }
-
-    #login-panel[data-enabled~="true"]:hover
-    {
-        background-color: #0464a2;
-    }
-
-    #login-panel.active
-    {
-        background-color: #0464a2;
-    }
-
-#profile-panel[data-enabled~="true"]:hover
-{
-    background-color: #0464a2;
-}
-
-#profile-panel.active
-{
-    background-color: #0464a2;
-}
-
-.header-logo
-{
-    height: @headerHeight;
-    line-height: @headerHeight;
-    width: @headerLogoWidth;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-image: url('../images/chronozoom.png');
-    margin-left: 10px;
-}
-
-.header-regimes {
-    height: @headerHeight;
-    width: @headerRegimesWidth;
-    display: none;
-}
-
-// Disable regimes if they don't fit devices.
-@media only screen and (max-width: 780px) {
-    .header-regimes {
-        height: @headerHeight;
-        width: 0px;
-        display: none;
-    }
-}
-
 .header-breadcrumbs
 {
+    .transition(opacity @fade-duration ease-in-out, visibility @fade-duration ease-in-out);
     height: @headerBreadcrumbsHeight;
     width: 100%;
-    display: none;
     margin-top: -@headerBreadcrumbsTopMargin;
-}
-
-.header-icons
-{
-    height: @headerHeight;
-}
-
-// Disable header icons in really-small mobile devices.
-@media only screen and (max-width: 340px) {
-    .header-icons {
-        height: @headerHeight;
-        width: 0;
-        display: none;
-    }
-}
-
-.header-icon
-{
-    height: @headerHeight;
-    width: @headerHeight;
-    line-height: @headerHeight;
-    background-repeat: no-repeat;
-    background-position: center;
-}
-
-    .header-icon[data-enabled~="true"]:hover
-    {
-        background-color: #0464a2;
-    }
-
-    .header-icon.active
-    {
-        background-color: #0464a2;
-    }
-
-.tour-icon
-{
-    background-image: url('../images/tour-icon.png');
-}
-
-.search-icon
-{
-    background-image: url('../images/search-icon.png');
-}
-
-.timeSeries-icon
-{
-    background-image: url('../images/timeseries-icon.png');
-}
-
-.view-icon
-{
-    background-image: url('../images/view-icon.png');
-    opacity: .5;
-}
-
-.edit-icon
-{
-    background-image: url('../images/edit-icon.png');
-}
-
-.profile-icon
-{
-    background-image: url('../images/profile-icon.png');
-    background-position-x: 3px;
-    display: inline-block;
-}
-
-#login-panel label.header-icon-label
-{
-    margin-left: 0px;
-}
-
-.header__edit-button:hover
-{
-    background-color: #0464a2;
-}
-
-.header__tour-icon
-{
-    background-image: url('../images/tour-icon.png');
-    background-repeat: no-repeat;
-    background-position: center;
-    height: 36px;
-    width: 36px;
-    line-height: 100%;
 }
 
 /***********************************************************
@@ -294,6 +258,7 @@ a
     -moz-box-sizing: border-box;
     box-sizing: border-box;
     width: 100%;
+    height: 100%; /* Fallback for older browsers */
     height: calc(~"100% -" @headerHeight ~"-" @footerHeight ~"-" @headerBreadcrumbsHeight ~"+" @headerBreadcrumbsTopMargin);
     height: -moz-calc(~"100% -" @headerHeight ~"-" @footerHeight ~"-" @headerBreadcrumbsHeight ~"+" @headerBreadcrumbsTopMargin);
     height: -webkit-calc(~"100% -" @headerHeight ~"-" @footerHeight ~"-" @headerBreadcrumbsHeight ~"+" @headerBreadcrumbsTopMargin);
@@ -369,24 +334,28 @@ a
     background-color: transparent;
     color: rgb(232,232,232);
     font-size: 10px;
-    font-family: Arial;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
 }
 
-    .contentItemDescription .text
-    {
-        position: relative;
-        overflow-x: hidden;
-        overflow-y: auto;
-        height: inherit;
-    }
-
-.tour_control
+.contentItemDescription .text
 {
-    height: @headerHeight;
-    width: @headerTourWidth;
-    display: none;
-    cursor: pointer;
-    margin-top: 5px;
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: inherit;
+}
+
+.tri-button-block
+{
+    button
+    {
+        min-width:   110px;
+        margin-right: 10px;
+    }
+}
+.tri-button-block button:last-child
+{
+    margin-right: 0px;
 }
 
 /***********************************************************
@@ -433,7 +402,7 @@ a
     color: #fff;
     vertical-align: middle;
     font-size: 18.5px;
-    font-family: Arial;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     cursor: default;
 }
 
@@ -462,7 +431,7 @@ a
         white-space: nowrap;
         font-weight: bold;
         font-size: 18px;
-        font-family: Arial;
+        font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
         cursor: default;
     }
 
@@ -532,286 +501,6 @@ a
             cursor: auto;
         }
 
-.czWindow
-{
-    position: absolute;
-    top: 144px;
-    left: 0;
-    z-index: 2000;
-    margin-bottom: 0;
-    margin-left: 0;
-    width: 220px;
-    border-bottom-right-radius: 8px;
-    background-color: #424242;
-    color: #BFBFBF;
-    font-size: 14.5px;
-    font-family: Arial;
-}
-
-    .czWindow .header
-    {
-        padding: 4px 0 2px 14px;
-        width: 167px;
-        background: #515151; /* for non-css3 browsers */
-        background: -moz-linear-gradient(left, #FDFDFD, #515151); /* Mozilla: */
-        background: -webkit-gradient(linear, left top, right top, from(#FDFDFD), to(#424242)); /* Chrome, Safari:*/
-        color: #424242;
-        vertical-align: middle;
-        font-size: 19px;
-        cursor: default;
-        filter: progid:DXImageTransform.Microsoft.Gradient(StartColorStr='#FDFDFD', EndColorStr='#424242', GradientType=1);
-        /* MSIE */
-    }
-
-    .czWindow .czTextBox
-    {
-        margin: 3px 5px 3px 5px;
-        height: 20px;
-        border: 1px solid #BFBFBF;
-        background-color: #424242;
-        color: #fff;
-        font-size: 12px;
-        font-family: Arial;
-    }
-
-        .czWindow .czTextBox:focus
-        {
-            border: 1px solid #fff;
-        }
-
-    .czWindow .emptyTextBox
-    {
-        color: #BFBFBF;
-        font-style: italic;
-        font-size: 12px;
-        font-family: Arial;
-    }
-
-    .czWindow .narration
-    {
-        margin-right: 15px;
-        margin-left: 5px;
-        padding-top: 10px;
-        width: 181px;
-        border-bottom: none; /*1px solid #424242;*/
-        text-align: center;
-        font-size: 13px;
-        cursor: pointer;
-    }
-
-    .czWindow .narration-selected
-    {
-        color: #fff;
-    }
-
-
-    .czWindow .content
-    {
-        margin: 10px 13px 0 10px;
-        width: 196px;
-        border-bottom: 1px solid #424242;
-    }
-
-        .czWindow .content .category
-        {
-            margin-right: 13px;
-            margin-bottom: 10px;
-            width: 196px;
-            border-bottom: 2px solid #BFBFBF;
-            vertical-align: middle;
-            cursor: pointer;
-        }
-
-            .czWindow .content .category:hover
-            {
-                color: #fff;
-            }
-
-
-        .czWindow .content .collapseButton
-        {
-            position: absolute;
-            left: 194px;
-        }
-
-
-
-        .czWindow .content .categorySelected
-        {
-            margin-right: 13px;
-            margin-bottom: 10px;
-            width: 196px;
-            border-bottom: none;
-            vertical-align: middle;
-            cursor: pointer;
-        }
-
-            .czWindow .content .categorySelected:hover
-            {
-                color: #fff;
-            }
-
-        .czWindow .content .itemContainer
-        {
-            margin-right: 15px;
-            margin-left: 5px;
-            padding-bottom: 10px;
-            width: 181px;
-            border-bottom: none; /*1px solid #424242;*/
-        }
-
-
-            .czWindow .content .itemContainer .item
-            {
-                overflow: hidden;
-                -ms-text-overflow: ellipsis;
-                -o-text-overflow: ellipsis;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                cursor: pointer;
-            }
-
-                .czWindow .content .itemContainer .item:hover
-                {
-                    color: #fff;
-                }
-
-            .czWindow .content .itemContainer .touritem-selected
-            {
-                color: #fff;
-            }
-
-    .czWindow .searchResults
-    {
-        overflow-x: hidden;
-        overflow-y: auto;
-        margin: 0 15px 10px 10px;
-        border-bottom: none; /*1px solid #424242;*/
-    }
-
-        .czWindow .searchResults .searchResultSection
-        {
-            overflow: hidden;
-            margin: 5px 10px 5px 0;
-            padding: 0;
-            border-bottom: 1px solid #BFBFBF;
-            text-align: left;
-            -ms-text-overflow: ellipsis;
-            -o-text-overflow: ellipsis;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-size: 13px;
-            cursor: default;
-        }
-
-        .czWindow .searchResults .searchResult
-        {
-            overflow: hidden;
-            margin-right: 10px;
-            margin-left: 7px;
-            padding: 0;
-            border-bottom: none; /*1px solid #424242;*/
-            text-align: left;
-            -ms-text-overflow: ellipsis;
-            -o-text-overflow: ellipsis;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-size: 13px;
-            cursor: pointer;
-        }
-
-            .czWindow .searchResults .searchResult:hover
-            {
-                color: #fff;
-            }
-
-        .czWindow .searchResults .searchNoResult
-        {
-            overflow: hidden;
-            margin-right: 10px;
-            padding: 0;
-            border-bottom: none; /*1px solid #424242;*/
-            text-align: left;
-            -ms-text-overflow: ellipsis;
-            -o-text-overflow: ellipsis;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            font-style: italic;
-            font-size: 13px;
-            cursor: default;
-        }
-
-
-.bookmarksWindow
-{
-    position: absolute;
-    bottom: 44px;
-    left: 0;
-    z-index: 1999;
-    margin-left: 0;
-    width: 200px;
-    min-height: 200px;
-    max-height: 410px;
-    border-top-right-radius: 8px;
-    background-color: #424242;
-    color: #BFBFBF;
-    font-size: 14.5px;
-    font-family: Arial;
-}
-
-    .bookmarksWindow .header
-    {
-        padding: 10px 6px 9px 5px;
-        padding-right: 6px;
-        padding-left: 5px;
-        border-bottom: 2px solid #BFBFBF;
-        color: #fff;
-        font-size: 14.5px;
-        cursor: default;
-    }
-
-    .bookmarksWindow .headerButton
-    {
-        position: absolute;
-        top: 9px;
-        right: 12px;
-    }
-
-    .bookmarksWindow .slideHeader
-    {
-        margin-right: 19px;
-        margin-left: 10px;
-        padding: 5px 6px 10px 4px;
-        color: White;
-        font-size: 14.5px;
-        cursor: default;
-    }
-
-    .bookmarksWindow .slideText
-    {
-        overflow-x: hidden;
-        overflow-y: auto;
-        margin-right: 19px;
-        margin-left: 15px;
-        padding: 5px 3px 5px 3px;
-        max-height: 250px;
-        color: #BFBFBF;
-        font-size: 13px;
-    }
-
-    .bookmarksWindow .slideFooter
-    {
-        margin: 20px 19px 0 10px;
-        padding: 5px 0 13px 4px;
-        height: 15px;
-        border-top: 1px solid #BFBFBF;
-        color: #fff;
-        text-align: right;
-        font-size: 12px;
-        cursor: default;
-    }
-
-
 /***********************************************************
 
                         Tooltip
@@ -871,7 +560,7 @@ a
 {
     color: #fff;
     font-size: 14px;
-    font-family: Verdana, Arial, Helvetica, sans-serif;
+    font-family: Verdana, Geneva, Arial, "Helvetica Neue", Helvetica, sans-serif;
 }
 
 .block
@@ -881,7 +570,6 @@ a
     background-color: #abc;
     white-space: nowrap;
 }
-
 
 
 
@@ -934,7 +622,7 @@ a
     color: #fff;
     vertical-align: middle;
     font-size: 18.5px;
-    font-family: Arial;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     cursor: default;
 }
 
@@ -968,7 +656,7 @@ a
             white-space: nowrap;
             font-weight: bold;
             font-size: 18px;
-            font-family: Arial;
+            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
             cursor: default;
         }
 
@@ -985,7 +673,7 @@ a
         width: 810px;
         height: auto;
         font-size: 16px;
-        font-family: Arial;
+        font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     }
 
         .welcomeScreen .content .description
@@ -1007,7 +695,7 @@ a
                 color: #fff;
                 font-weight: bold;
                 font-size: 18px;
-                font-family: Arial;
+                font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
             }
 
         .welcomeScreen .content .media
@@ -1080,7 +768,7 @@ img.fallbackBackground
     color: White;
     vertical-align: middle;
     font-size: 18.5px;
-    font-family: Arial;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     cursor: default;
 }
 
@@ -1105,7 +793,7 @@ img.fallbackBackground
             white-space: nowrap;
             font-weight: bold;
             font-size: 18px;
-            font-family: Arial;
+            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
             cursor: default;
         }
 
@@ -1122,7 +810,7 @@ img.fallbackBackground
         width: 810px;
         height: auto;
         font-size: 16px;
-        font-family: Arial;
+        font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
     }
 
         .fallbackContent .content .description
@@ -1139,7 +827,7 @@ img.fallbackBackground
                 color: #fff;
                 text-decoration: underline;
                 font-size: 16px;
-                font-family: Arial;
+                font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
             }
 
             .fallbackContent .content .description .button
@@ -1153,7 +841,7 @@ img.fallbackBackground
                 text-align: center;
                 font-weight: bold;
                 font-size: 18px;
-                font-family: Arial;
+                font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
             }
 
         .fallbackContent .content .media
@@ -1180,61 +868,74 @@ img.fallbackBackground
 
 ***********************************************************/
 
-#footer
+footer
 {
-    position: relative;
+    position: absolute;
+    width: 100%;
     height: 25px;
+    bottom: 0px;
+    background-color:   @footerBackgroundColor;
+    -moz-box-sizing:    border-box;
+    -webkit-box-sizing: border-box;
+    box-sizing:         border-box;
+    border-top:         solid 1px @footerBorderColor;
+    border-bottom:      solid 1px @footerBorderColor;
 }
 
-    #footer ul
-    {
-        overflow: hidden;
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
+#footer ul
+{
+    overflow: hidden;
+    visibility:hidden;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
 
-        #footer ul li
-        {
-            height: 100%;
-        }
+#footer ul li
+{
+    height: 100%;
+
+}
 
 .footer-link
 {
     margin-right: 10px;
     margin-left: 10px;
     height: 100%;
-    color: #FFF;
+    color: #ddd;
     white-space: nowrap;
     line-height: 25px;
-}
-
-    .footer-link:hover
+    &:hover
     {
         cursor: pointer;
+        text-shadow: 1px 1px 20px #fff;
     }
+}
 
 .footer-links
 {
     height: @footerHeight;
     width: @footerLinksWidth;
-    color: #AAA;
+    color: #aaa;
+    bottom: 1px;
 }
 
 .footer-credits
 {
     height: @footerHeight;
+    visibility:hidden;
     width: calc(~"100%" - @footerLinksWidth);
     width: -moz-calc(~"100%" - @footerLinksWidth);
     width: -webkit-calc(~"100%" - @footerLinksWidth);
     width: -o-calc(~"100%" - @footerLinksWidth);
-    color: #AAA;
+    color: #aaa;
+    bottom: 1px;
 }
 
-    .footer-credits ul
-    {
-        margin-top: 4px;
-    }
+.footer-credits ul
+{
+    margin-top: 4px;
+}
 
 .footer-link-credits, .footer-link-credits:visited, .footer-link-credits:link
 {
@@ -1242,15 +943,20 @@ img.fallbackBackground
     margin-left: 6px;
 }
 
-    .footer-link-credits img
+.footer-link-credits img
+{
+    margin-bottom: 3px;
+    opacity: 0.8;
+    &:hover
     {
-        margin-bottom: 3px;
+        opacity: 1;
     }
+}
 
 .footer-text
 {
     margin-left: 6px;
-    color: #AAA;
+    color: #aaa;
 }
 
 /***********************************************************
@@ -1304,7 +1010,6 @@ img.fallbackBackground
     height: 100%;
     border-collapse: collapse;
     cellspacing: 0;
-    cellpadding: 0;
     border-spacing: 0;
 }
 
@@ -1331,7 +1036,7 @@ img.fallbackBackground
     height: 100%;
     color: #bfbfbf;
     font-size: 16px;
-    font-family: verdana;
+    font-family: Verdana, Geneva, sans-serif;
     line-height: 100%;
     cursor: default;
 }
@@ -1341,16 +1046,16 @@ img.fallbackBackground
     position: relative;
     display: inline-block;
     height: 25px;
-    font-size: 14px;
-    font-family: verdana;
+    font-size: 13px;
+    font-family: Verdana, Geneva, sans-serif;
     line-height: 25px;
     cursor: pointer;
-    color: #FFF;
+    color: #eea;
 }
 
 .breadcrumb-hover
 {
-    color: #fff;
+    color: #ee6;
 }
 
 /***********************************************************
@@ -1358,6 +1063,73 @@ img.fallbackBackground
                             Auxiliary
 
 ***********************************************************/
+
+.border-box
+{
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+.bottom-button-block
+{
+    position: absolute;
+    bottom: 15px;
+    left: 0px;
+    width: 100%;
+    text-align: center;
+}
+
+.table-blue { table-layout: fixed; border-spacing: 0px; border: solid 1px #6ae; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }
+.table-blue caption { padding: 3px 5px 6px 5px; background-color: #6ae; color: #fff; text-shadow: 0px 1px 1px #888; border-top-left-radius: 4px; border-top-right-radius: 4px; }
+.table-blue thead,
+.table-blue tfoot { background-color: #efefef; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }
+.table-blue tbody { background-color: #efefef; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; font-size: 0.9em; display: block; overflow-y: auto; }
+.table-blue tbody tr:hover { background-color: #ddd; }
+.table-blue td { padding: 3px 5px 4px 5px; vertical-align: top; text-align: left; overflow: hidden; -ms-text-overflow: ellipsis; -o-text-overflow: ellipsis; text-overflow: ellipsis; }
+.table-blue tr { display: block; } /* part of webkit fix for tbody overflow auto */
+.table-blue tr:last-child td:first-child { border-bottom-left-radius:  4px; }
+.table-blue tr:last-child td:last-child  { border-bottom-right-radius: 4px; }
+.table-blue input[type="search"],
+.table-blue button { background-color: #fff; display: block; width: 100%; border-radius: 4px; margin-left: -2px; }
+
+.table-blue td.delete { width: 15px; padding-top: 0px; text-align: center; font-size: 1.2em; font-weight: bold; cursor: pointer;}
+.table-blue td.delete:after { content: '\00D7'; } /* &times; */
+.table-blue td.delete:hover { text-shadow: 0px 1px 1px #333; }
+
+.table-blue thead td.select { padding-top: 5px; }
+.table-blue td.select { width: 15px; text-align: center; }
+
+.left
+{
+    text-align: left;
+}
+
+.right
+{
+    text-align: right;
+}
+
+.center
+{
+    text-align: center !important;
+}
+
+.centerblock
+{
+    display: inline-block;
+    margin: 0px auto;
+}
+
+.justify
+{
+    text-align: justify;
+}
+
+.max
+{
+    width: 100%;
+}
 
 .fleft
 {
@@ -1372,6 +1144,20 @@ img.fallbackBackground
 .clearer
 {
     clear: both;
+}
+
+.hidden
+{
+    display: none;
+}
+
+.btn-icon
+{
+    color: #444;
+    font-weight: bold;
+    padding-left: 5px;
+    position: relative;
+    top: -1px;
 }
 
 .unselectable
@@ -1394,6 +1180,10 @@ img.fallbackBackground
     user-select: text;
 }
 
+.no-transition {
+    .transition(none);
+}
+
 /***********************************************************
 
                         Form Base
@@ -1403,19 +1193,19 @@ img.fallbackBackground
 .cz-form
 {
     position: absolute;
-    z-index: 100000001;
+    z-index: 2000;
     display: none;
     cursor: default;
 }
 
 .cz-form-right
 {
-    top: 36px;
+    top: @headerHeight + @headerBreadcrumbsHeight - @headerBreadcrumbsTopMargin;
 }
 
 .cz-form-left
 {
-    top: 57px;
+    top: @headerHeight + @headerBreadcrumbsHeight - @headerBreadcrumbsTopMargin;
 }
 
 .cz-form-header
@@ -1491,14 +1281,24 @@ img.fallbackBackground
     text-align: justify;
 }
 
+.cz-input-wrapper {
+    input.error {
+        border: @border-error;
+    }
+
+    div.error {
+        .input-error-message;
+    }
+}
+
 .cz-input
 {
-    color: #232323;
+    color: @defaultBackgroundColor;
     background-color: #E9E9E9;
     border: 1px solid #D5D5D5;
     padding: 5px;
     font-size: 12px;
-    font-family: 'Segoe UI', Helvetica, Arial, 'Trebuchet MS', 'San Serif';
+    font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, 'Trebuchet MS', sans-serif;
     vertical-align: top;
     -webkit-box-sizing: border-box;
     -moz-box-sizing: border-box;
@@ -1520,7 +1320,7 @@ img.fallbackBackground
     min-width: 150px;
     font-size: 12px;
     padding: 10px 5px;
-    font-family: 'Segoe UI', Helvetica, Arial, 'Trebuchet MS', 'San Serif';
+    font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, 'Trebuchet MS', sans-serif;
     /* IE9 */
     filter: progid:DXImageTransform.Microsoft.Gradient(StartColorStr='#1B6AAB', EndColorStr='#0E4073', GradientType=0);
     /* IE10 Consumer Preview */
@@ -1535,6 +1335,33 @@ img.fallbackBackground
     background-image: -webkit-linear-gradient(bottom, #0E4073 0%, #1B6AAB 100%);
     /* W3C Markup, IE10 Release Preview */
     background-image: linear-gradient(to top, #0E4073 0%, #1B6AAB 100%);
+}
+.cz-button:hover,
+.cz-medialist-item:hover
+{
+    opacity: 0.9;
+}
+
+.cz-button-inline   /* overlay for .cz-button */
+{
+    color: #000;
+    background-image: -webkit-gradient(
+	    linear,
+	    left top,
+	    left bottom,
+	    color-stop(0, #ddd),
+	    color-stop(1, #bbb)
+    );
+    background-image: -o-linear-gradient(     bottom, #ddd 0%, #bbb 100%);
+    background-image: -moz-linear-gradient(   bottom, #ddd 0%, #bbb 100%);
+    background-image: -webkit-linear-gradient(bottom, #ddd 0%, #bbb 100%);
+    background-image: -ms-linear-gradient(    bottom, #ddd 0%, #bbb 100%);
+    background-image: linear-gradient(     to bottom, #ddd 0%, #bbb 100%);
+    border: solid 1px #aaa;
+    -xborder: outset 1px #bbb;
+    border-top-color: #bbb;
+    text-shadow: 0px 1px 1px #fff;
+    padding: 4px 6px 5px 6px;
 }
 
 .cz-radiobutton + label
@@ -1561,7 +1388,8 @@ img.fallbackBackground
 
 .cz-form-errormsg
 {
-    color: #dd4b39;
+    .form-error-message;
+
     display: block;
 }
 
@@ -1576,7 +1404,7 @@ img.fallbackBackground
 
 .cz-darkgray
 {
-    color: #232323;
+    color: @defaultBackgroundColor;
 }
 
 .cz-darkblue
@@ -1589,10 +1417,25 @@ img.fallbackBackground
     color: #038ae6;
 }
 
+.cz-red
+{
+    color: #dd4b39;
+}
+
 .cz-form-label
 {
     margin: 5px 0;
-    display: inline-block;
+    display: block;
+}
+
+a
+{
+    color: #0464a2;
+}
+
+.cz-form-label input[type="checkbox"]
+{
+    margin-left: 0px;
 }
 
 /***********************************************************
@@ -1600,6 +1443,13 @@ img.fallbackBackground
                         Custom Forms
 
 ***********************************************************/
+
+.cz-form-color,
+.cz-form-range,
+.cz-medialist-item
+{
+    cursor: pointer;
+}
 
 /* Header Edit Form */
 .cz-header-edit-form
@@ -1612,20 +1462,30 @@ img.fallbackBackground
 .cz-message-window
 {
     width: 330px;
-    height: 100px;
-    top: 36px;
+    height: auto;
     left: 0;
-}
 
-    .cz-message-window > .cz-form-content
+    .cz-form-content
     {
-        position: absolute;
-        top: 36px;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        overflow-y: auto;
+        position: relative;
+        top: 0;
+        height: auto !important;
+        padding: 1px 15px 10px 10px;
+        background-color: #fff;
+
+        textarea
+        {
+            display: none;
+            width: 100%;
+            margin-top: 12px;
+            overflow: auto;
+            resize: none;
+            background-color: #eee;
+            border-color: #ccc;
+            outline: none;
+        }
     }
+}
 
 /* Edit Tour Form */
 .cz-form-tour-edit
@@ -1666,12 +1526,31 @@ img.fallbackBackground
     vertical-align: top;
 }
 
+.cz-tourstop-lapseblock label
+{
+    cursor: help;
+    display: inline-block;
+}
+
+.cz-tourstop-lapse
+{
+    text-align: right;
+    width: 55px;
+}
+
 .cz-tourstop-description
 {
     display: block;
-    height: 100px;
+    height: 80px;
     width: 100%;
     resize: none;
+    font-family: Consolas, "Lucida Console", "Lucida Sans Typewriter", Monaco, "Bitstream Vera Sans Mono", monospace;
+}
+
+.cz-tourlist-cleardiv {
+    clear: both;
+    width: 100%;
+     height: 14px;
 }
 
 /* Tours List Form */
@@ -1684,21 +1563,55 @@ img.fallbackBackground
     bottom: 25px;
 }
 
-    .cz-tourlist-form > .cz-form-content
-    {
-        position: absolute;
-        top: 36px;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        overflow-y: auto;
-    }
+.cz-tourlist-form > .cz-form-content
+{
+    position: absolute;
+    top: 36px;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    overflow-y: auto;
+}
 
-        .cz-tourlist-form > .cz-form-content > #tours
+.cz-tourlist-form > .cz-form-content > #tours
+{
+    display: block;
+}
+
+#tours
+{
+    .cz-contentitem-listitem-descr
+    {
+        margin-bottom: 10px;
+    }
+    .cz-contentitem-listitem-button
+    {
+        padding-right: 10px;
+        border-right: solid 1px #ccc;
+        margin-right: 10px;
+        &:last-child
         {
-            display: block;
-            min-height: 200px;
+            border-right-style: none;
         }
+        img.cz-share
+        {
+            height: 1em;
+            width: auto;
+            text-decoration: none;
+            position: relative;
+            bottom: -1px;
+        }
+    }
+}
+
+#tour-cosmos .cz-contentitem-listitem-button
+{
+    font-size: 15px;
+    &:hover
+    {
+        color: rgb(90, 210, 243);
+    }
+}
 
 /* Edit Timeline Form */
 .cz-form-timeline
@@ -1720,6 +1633,54 @@ img.fallbackBackground
         overflow-y: auto;
     }
 
+/* Time Series Form */
+.cz-form-preloadedrecord 
+{
+    display: inline-block;
+    vertical-align: bottom;
+    padding-right: 2px;
+    padding-left: 2px;
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    -o-text-overflow: ellipsis; 
+    width: 150px;
+    white-space: nowrap; 
+}
+
+a.cz-form-preloadedrecord
+{
+    color: rgb(4, 100, 162);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+a.cz-form-preloadedrecord:hover
+{
+    color: #0464a2;
+}
+
+span.cz-form-preloadedrecord
+{
+    font-size: 9pt;
+    width: auto;
+    color: #000000;
+    padding-bottom: 1px;
+}
+
+a.cz-form-preloadedrecord.time-series-link
+{
+    font-size: 9pt;
+    width: auto;
+    padding-bottom: 1px;
+}
+
+
+
+#existingTimeSeries a.cz-form-btn {
+        height: 22px;
+        padding-top: 1px;
+    }
+
 /* Edit Exhibit Form */
 .cz-form-exhibit
 {
@@ -1736,6 +1697,11 @@ img.fallbackBackground
         bottom: 0;
         left: 0;
         overflow-y: auto;
+    }
+
+    .cz-form-item-descr
+    {
+        font-family: Consolas, "Lucida Console", "Lucida Sans Typewriter", Monaco, "Bitstream Vera Sans Mono", monospace;
     }
 
 /* Edit Content Item Form */
@@ -1815,6 +1781,24 @@ img.fallbackBackground
     {
         width: 134px;
         color: #fff;
+    }
+
+/* Edit Collection Form */
+.cz-collection-form
+{
+    width: 420px;
+    bottom: 25px;
+    left: 0;
+}
+
+    .cz-collection-form > .cz-form-content
+    {
+        position: absolute;
+        top: 36px;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        overflow-y: auto;
     }
 
 .auth-panel-login
@@ -1910,9 +1894,8 @@ img.fallbackBackground
     width: 30.2734375%;
     bottom: 25px;
     left: 0;
-}
 
-    .cz-header-search-form > .cz-form-content
+    .cz-form-content
     {
         position: absolute;
         top: 36px;
@@ -1921,6 +1904,13 @@ img.fallbackBackground
         left: 0;
         overflow-y: hidden;
     }
+
+    .cz-input
+    {
+        display: block;
+        width: 100%;
+    }
+}
 
 .cz-form-progress-bar
 {
@@ -1935,7 +1925,7 @@ img.fallbackBackground
 .cz-form-content-box
 {
     font-size: 14px;
-    font-family: 'Segoe UI', Helvetica, Arial, 'Trebuchet MS', 'San Serif';
+    font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, 'Trebuchet MS', sans-serif;
     vertical-align: top;
     height: 100%;
 }
@@ -1957,8 +1947,8 @@ img.fallbackBackground
 .cz-form-search-section-title
 {
     margin-top: 0px;
-    color: #232323;
-    border-bottom: 1px solid #232323;
+    color: @defaultBackgroundColor;
+    border-bottom: 1px solid @defaultBackgroundColor;
 }
 
 .cz-form-search-result
@@ -1974,7 +1964,7 @@ img.fallbackBackground
 
 .cz-form-search-results-count
 {
-    color: #232323;
+    color: @defaultBackgroundColor;
 }
 
 /* Tour Caption Form */
@@ -2108,6 +2098,21 @@ img.fallbackBackground
     background-image: url(../images/narration-off.png);
 }
 
+.cz-form-color
+{
+    display: inline-block;
+    padding: 0px;
+    width: 85px;
+    height: 35px;
+}
+
+.cz-form-range
+{
+    width: 75px;
+    margin-left: 10px;
+    margin-right: 10px;
+}
+
 /***********************************************************
 
                     ListBox Base
@@ -2129,8 +2134,12 @@ img.fallbackBackground
 {
     margin: 15px 0;
     list-style-type: none;
-    height: 200px;
     overflow: auto;
+}
+
+.cz-tour-listbox-wrapper
+{
+    overflow-y: auto;
 }
 
 .cz-listbox-placeholder
@@ -2174,16 +2183,17 @@ img.fallbackBackground
 
 .cz-contentitem-listitem-icon
 {
+    width: 15%;    
     display: inline-block;
-    width: 15%;
+    cursor: pointer;
+}
+.cz-contentitem-listitem-icon > img
+{
+    width: 100%;
+    height: auto;    
 }
 
-    .cz-contentitem-listitem-icon > img
-    {
-        max-width: 100%;
-    }
-
-.cz-contentitem-listitem-content
+    .cz-contentitem-listitem-content
 {
     display: inline-block;
     margin: 0px 5px;
@@ -2194,7 +2204,7 @@ img.fallbackBackground
 .cz-contentitem-listitem-title
 {
     margin: 0 0 10px 0;
-    color: #232323;
+    color: @defaultBackgroundColor;
     font-size: 12px;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -2234,3 +2244,98 @@ img.fallbackBackground
     width: auto;
     display: inline;
 }
+
+.root-cloak {
+  position: absolute;
+  display: none;
+  z-index: 8;
+  cursor: not-allowed;
+  background: @canvas-disable-cloak;
+
+  &.visible {
+    display: block;
+  }
+}
+
+.root-cloak-left {
+  .root-cloak;
+
+  top: @headerHeight + @headerBreadcrumbsHeight - @headerBreadcrumbsTopMargin + 38px;
+  bottom: @footerHeight;
+  left: 0;
+}
+
+.root-cloak-right {
+  .root-cloak;
+
+  top: @headerHeight + @headerBreadcrumbsHeight - @headerBreadcrumbsTopMargin + 38px;
+  bottom: @footerHeight;
+  right: 0;
+}
+
+.root-cloak-top {
+  .root-cloak;
+
+  top: @headerHeight + @headerBreadcrumbsHeight - @headerBreadcrumbsTopMargin + 38px;
+  left: 0;
+  right: 0;
+}
+
+.root-cloak-bottom {
+  .root-cloak;
+
+  bottom: @footerHeight;
+  left: 0;
+  right: 0;
+}
+
+.ellipsis
+{
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.help
+{
+    cursor: help;
+}
+
+.nocursor
+{
+    cursor: default;
+}
+
+#editCollectionButton
+{
+    position: absolute;
+    margin: -40px 0px 0px 20px;
+    z-index: 100;
+}
+#editCollectionButton .image
+{
+    cursor: pointer;
+    margin-right: 10px;
+}
+#editCollectionButton > img
+{
+    height: 50px;
+    width: 50px;
+}
+#editCollectionButton .title
+{
+    color: #e9e9e9;
+    font-size: 16px;
+    font-weight: bold;
+    vertical-align: top;
+}
+
+/* Prevent SkyDrive clicks */
+#embedItemDiv
+{
+    pointer-events: none;
+    cursor: default;
+}
+
+/* this import must always be last line as themes are overrides */
+@import "themes";

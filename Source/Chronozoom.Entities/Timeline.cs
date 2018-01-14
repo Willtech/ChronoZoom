@@ -14,13 +14,23 @@ using System.Data.SqlTypes;
 namespace Chronozoom.Entities
 {
     /// <summary>
-    /// A visual representation of a time period that contains a set of Exhibits, child Timelines, and Time Series Data, and is contained by another Timeline or a Collection. The Timeline entity is externally searchable & linkable.
+    /// A visual representation of a time period that contains a set of Exhibits, child Timelines, and Time Series Data, and is contained by another Timeline or a Collection. The Timeline entity is externally searchable and linkable.
     /// </summary>
     [KnownType(typeof(TimelineRaw))]
     [KnownType(typeof(ExhibitRaw))]
     [DataContract]
     public class Timeline
     {
+        /// <summary>
+        /// Constructor used to set default values.
+        /// </summary>
+        public Timeline()
+        {
+            this.Id = Guid.NewGuid();   // Don't use [DatabaseGenerated(DatabaseGeneratedOption.Identity)] on Id
+            this.FromIsCirca = false;
+            this.ToIsCirca   = false;
+        }
+
         /// <summary>
         /// The ID of the timeline (GUID).
         /// </summary>
@@ -29,12 +39,12 @@ namespace Chronozoom.Entities
         public Guid Id { get; set; }
 
         /// <summary>
-        /// The depth of the timeline in the timeline tree
+        /// The depth of the timeline in the timeline tree.
         /// </summary>
         public int Depth { get; set; }
 
         /// <summary>
-        /// The number of content items contained in subtree under current timeline
+        /// The number of content items contained in subtree under current timeline.
         /// </summary>
         public int SubtreeSize { get; set; }
 
@@ -61,10 +71,26 @@ namespace Chronozoom.Entities
         public decimal FromYear { get; set; }
 
         /// <summary>
+        /// If true, the timeline start date is circa/approximate.
+        /// Default is false.
+        /// </summary>
+        [DataMember]
+        [Column(TypeName = "bit")]
+        public bool FromIsCirca { get; set; }
+
+        /// <summary>
         /// The year the timeline ends.
         /// </summary>
         [DataMember(Name = "end")]
         public decimal ToYear { get; set; }
+
+        /// <summary>
+        /// If true, the timeline end date is circa/approximate.
+        /// Default is false.
+        /// </summary>
+        [DataMember]
+        [Column(TypeName = "bit")]
+        public bool ToIsCirca { get; set; }
 
         /// <summary>
         /// ???
@@ -77,6 +103,23 @@ namespace Chronozoom.Entities
         /// </summary>
         [DataMember]
         public decimal? Height { get; set; }
+
+        [DataMember(Name = "offsetY")]
+        public decimal? OffsetY { get; set; }
+
+        /// <summary>
+        /// The URL of background image.
+        /// </summary>
+        [DataMember(Name = "backgroundUrl")]
+        [MaxLength(4000)]
+        [Column(TypeName = "nvarchar")]
+        public string BackgroundUrl { get; set; }
+
+        /// <summary>
+        /// The aspect ratio of the timeline: width / height.
+        /// </summary>
+        [DataMember(Name = "aspectRatio")]
+        public decimal? AspectRatio { get; set; }
 
         /// <summary>
         /// The collection of child timelines belonging to the timeline.
@@ -110,9 +153,14 @@ namespace Chronozoom.Entities
             Title = t.Title;
             Regime = t.Regime;
             FromYear = t.FromYear;
+            FromIsCirca = t.FromIsCirca;
             ToYear = t.ToYear;
+            ToIsCirca = t.ToIsCirca;
             ForkNode = t.ForkNode;
+            OffsetY = t.OffsetY;
             Height = t.Height;
+            BackgroundUrl = t.BackgroundUrl;
+            AspectRatio = t.AspectRatio;
         }
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1707:IdentifiersShouldNotContainUnderscores", Justification = "Needs to match storage column name")]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1709:IdentifiersShouldBeCasedCorrectly", MessageId = "ID", Justification = "Needs to match storage column name")]

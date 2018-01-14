@@ -1,4 +1,8 @@
+﻿/// <reference path='../ui/controls/formbase.ts'/>
+/// <reference path='../scripts/authoring.ts'/>
+/// <reference path='../scripts/typings/jquery/jquery.d.ts'/>
 var __extends = this.__extends || function (d, b) {
+    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     __.prototype = b.prototype;
     d.prototype = new __();
@@ -9,9 +13,11 @@ var CZ;
         var FormLogin = (function (_super) {
             __extends(FormLogin, _super);
             function FormLogin(container, formInfo) {
-                        _super.call(this, container, formInfo);
+                _super.call(this, container, formInfo);
             }
             FormLogin.prototype.show = function () {
+                //CZ.Menus.isDisabled = true;
+                //CZ.Menus.Refresh();
                 _super.prototype.show.call(this, {
                     effect: "slide",
                     direction: "right",
@@ -20,6 +26,9 @@ var CZ;
                 this.activationSource.addClass("active");
             };
             FormLogin.prototype.close = function () {
+                //CZ.Menus.isDisabled = false;
+                //CZ.Menus.Refresh();
+                sessionStorage.removeItem('showMyCollections');
                 _super.prototype.close.call(this, {
                     effect: "slide",
                     direction: "right",
@@ -29,7 +38,7 @@ var CZ;
             };
             return FormLogin;
         })(CZ.UI.FormBase);
-        UI.FormLogin = FormLogin;        
+        UI.FormLogin = FormLogin;
     })(CZ.UI || (CZ.UI = {}));
     var UI = CZ.UI;
 })(CZ || (CZ = {}));

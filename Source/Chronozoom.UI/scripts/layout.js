@@ -1,10 +1,19 @@
+﻿/// <reference path='settings.ts'/>
+/// <reference path='vccontent.ts'/>
+/// <reference path='common.ts'/>
+/// <reference path='viewport.ts'/>
+/// <reference path='viewport-animation.ts'/>
 var CZ;
 (function (CZ) {
     (function (Layout) {
         var isLayoutAnimation = true;
+
         Layout.animatingElements = {
             length: 0
         };
+
+        Layout.timelineHeightRate = 0.4;
+
         function Timeline(title, left, right, childTimelines, exhibits) {
             this.Title = title;
             this.left = left;
@@ -12,341 +21,598 @@ var CZ;
             this.ChildTimelines = childTimelines;
             this.Exhibits = exhibits;
         }
+
         function Infodot(x, contentItems) {
             this.x = x;
             this.ContentItems = contentItems;
         }
+
         function titleObject(name) {
             this.name = name;
         }
+
         function Prepare(timeline) {
             timeline.left = CZ.Dates.getCoordinateFromDecimalYear(timeline.start);
             timeline.right = CZ.Dates.getCoordinateFromDecimalYear(timeline.end);
+
+            // save timeline end date in case if it is '9999'
             timeline.endDate = timeline.end;
-            if(timeline.exhibits instanceof Array) {
+
+            if (timeline.exhibits instanceof Array) {
                 timeline.exhibits.forEach(function (exhibit) {
                     exhibit.x = CZ.Dates.getCoordinateFromDecimalYear(exhibit.time);
+
                     exhibit.contentItems.forEach(function (contentItem) {
+                        // For content items that contain an extension, activate it.
                         CZ.Extensions.activateExtension(contentItem.mediaType);
                     });
                 });
             }
-            if(timeline.timelines instanceof Array) {
+
+            if (timeline.timelines instanceof Array) {
                 timeline.timelines.forEach(function (childTimeline) {
                     childTimeline.ParentTimeline = timeline;
                     Prepare(childTimeline);
                 });
             }
+
             GenerateAspect(timeline);
-            if(timeline.Height) {
+            if (timeline.Height)
                 timeline.Height /= 100;
-            } else if(!timeline.AspectRatio && !timeline.Height) {
-                timeline.Height = 0.4;
-            }
+            else if (!timeline.AspectRatio && !timeline.Height)
+                timeline.Height = CZ.Layout.timelineHeightRate;
         }
+
         function GenerateAspect(timeline) {
-            if(timeline.ID == CZ.Settings.cosmosTimelineID) {
-                timeline.AspectRatio = 10;
-            }
+            timeline.AspectRatio = timeline.aspectRatio || 10;
         }
+
         function LayoutTimeline(timeline, parentWidth, measureContext) {
             var headerPercent = CZ.Settings.timelineHeaderSize + 2 * CZ.Settings.timelineHeaderMargin;
             var timelineWidth = timeline.right - timeline.left;
             timeline.width = timelineWidth;
-            if(timeline.AspectRatio && !timeline.height) {
+
+            //Set content margin
+            timeline.heightEps = parentWidth * CZ.Settings.timelineContentMargin;
+
+            //If child timeline has fixed aspect ratio, calculate its height according to it
+            if (timeline.AspectRatio && !timeline.height) {
                 timeline.height = timelineWidth / timeline.AspectRatio;
             }
-            if(timeline.timelines instanceof Array) {
+
+            if (timeline.timelines instanceof Array) {
                 timeline.timelines.forEach(function (tl) {
-                    if(tl.AspectRatio) {
+                    //If child timeline has fixed aspect ratio, calculate its height according to it
+                    if (tl.AspectRatio) {
                         tl.height = (tl.right - tl.left) / tl.AspectRatio;
-                    } else if(timeline.height && tl.Height) {
+                    } else if (timeline.height && tl.Height) {
+                        //If Child timeline has height in percentage of parent, calculate it before layout pass
                         tl.height = Math.min(timeline.height * tl.Height, (tl.right - tl.left) * CZ.Settings.timelineMinAspect);
+                        if (tl.offsetY!==null && tl.Height) {
+                            tl.height = timeline.height * tl.Height;
+                        }
                     }
+
+                    //Calculate layout for each child timeline
                     LayoutTimeline(tl, timelineWidth, measureContext);
                 });
             }
-            if(!timeline.height) {
+
+            if (!timeline.height) {
+                //Searching for timeline with the biggest ratio between its height percentage and real height
                 var scaleCoef = undefined;
-                if(timeline.timelines instanceof Array) {
+                if (timeline.timelines instanceof Array) {
                     timeline.timelines.forEach(function (tl) {
-                        if(tl.Height && !tl.AspectRatio) {
+                        if (tl.Height && !tl.AspectRatio) {
                             var localScale = tl.height / tl.Height;
-                            if(!scaleCoef || scaleCoef < localScale) {
+                            if (!scaleCoef || scaleCoef < localScale)
                                 scaleCoef = localScale;
-                            }
                         }
                     });
                 }
-                if(scaleCoef) {
-                    if(timeline.timelines instanceof Array) {
+
+                //Scaling timelines to make their percentages corresponding to each other
+                if (scaleCoef) {
+                    if (timeline.timelines instanceof Array) {
                         timeline.timelines.forEach(function (tl) {
-                            if(tl.Height && !tl.AspectRatio) {
+                            if (tl.Height && !tl.AspectRatio) {
                                 var scaleParam = scaleCoef * tl.Height / tl.height;
-                                if(scaleParam > 1) {
+                                if (scaleParam > 1) {
                                     tl.realY *= scaleParam;
                                     Scale(tl, scaleParam, measureContext);
                                 }
                             }
                         });
                     }
+
+                    //Set final timelineHeight
                     timeline.height = scaleCoef;
                 }
             }
+
+            //Now positioning child content and title
             var exhibitSize = CalcInfodotSize(timeline);
-            var tlRes = LayoutChildTimelinesOnly(timeline);
-            var res = LayoutContent(timeline, exhibitSize);
-            if(timeline.height) {
-                var titleObject = GenerateTitleObject(timeline.height, timeline, measureContext);
-                if(timeline.exhibits instanceof Array) {
-                    if(timeline.exhibits.length > 0 && (tlRes.max - tlRes.min) < timeline.height) {
-                        while((res.max - res.min) > (timeline.height - titleObject.bboxHeight) && exhibitSize > timelineWidth / 20.0) {
+
+            timeline.realY = 0;
+
+            //Layout only timelines to check that they fit into parent timeline
+            var tlRes = LayoutChildTimelinesOnly(timeline, null, headerPercent);
+
+            var hFlag = (timeline.Height & timeline.offsetY) ? true : false;
+            //First layout iteration of full content (taking Sequence in account)
+            var res = LayoutContent(timeline, exhibitSize, hFlag, timeline.height,
+                headerPercent, exhibitSize);
+
+            if (timeline.height) {
+                if (timeline.exhibits instanceof Array) {
+                    if (timeline.exhibits.length > 0 && (tlRes.max - tlRes.min) < timeline.height) {
+                        while ((res.max - res.min) > timeline.height && exhibitSize > timelineWidth / 20.0) {
                             exhibitSize /= 1.5;
-                            res = LayoutContent(timeline, exhibitSize);
+                            res = LayoutContent(timeline, exhibitSize, hFlag, timeline.height, headerPercent);
                         }
                     }
                 }
-                if((res.max - res.min) > (timeline.height - titleObject.bboxHeight)) {
-                    var contentHeight = res.max - res.min;
-                    var fullHeight = contentHeight / (1 - headerPercent);
-                    var titleObject = GenerateTitleObject(fullHeight, timeline, measureContext);
-                    timeline.height = fullHeight;
-                } else {
+
+                if ((res.max - res.min) > timeline.height) {
+                    //console.log("Warning: Child timelines and exhibits doesn't fit into parent. Timeline name: " + timeline.title);
+                    timeline.height = res.max - res.min;
                 }
-                timeline.titleRect = titleObject;
+
             } else {
                 var min = res.min;
                 var max = res.max;
+
                 var minAspect = 1.0 / CZ.Settings.timelineMinAspect;
                 var minHeight = timelineWidth / minAspect;
-                var contentHeight = Math.max((1 - headerPercent) * minHeight, max - min);
-                var fullHeight = contentHeight / (1 - headerPercent);
-                var titleObject = GenerateTitleObject(fullHeight, timeline, measureContext);
-                timeline.titleRect = titleObject;
-                timeline.height = fullHeight;
-            }
-            timeline.heightEps = parentWidth * CZ.Settings.timelineContentMargin;
-            timeline.realHeight = timeline.height + 2 * timeline.heightEps;
-            timeline.realY = 0;
-            if(timeline.exhibits instanceof Array) {
+
+                //Measure title
+                var contentHeight = Math.max(minHeight, max - min);
+                timeline.height = contentHeight;
+             }
+
+            if (timeline.Height & timeline.offsetY)
+                timeline.realHeight = timeline.height;
+            else
+                timeline.realHeight = timeline.height + 2 * timeline.heightEps;
+
+            if (timeline.exhibits instanceof Array) {
                 timeline.exhibits.forEach(function (infodot) {
                     infodot.realY -= res.min;
                 });
             }
-            if(timeline.timelines instanceof Array) {
+
+            if (timeline.timelines instanceof Array) {
                 timeline.timelines.forEach(function (tl) {
                     tl.realY -= res.min;
                 });
             }
         }
+
+
         function PositionContent(contentArray, arrangedArray, intersectionFunc) {
             contentArray.forEach(function (el) {
-                var usedY = new Array();
+                var usedY = [];
+
                 arrangedArray.forEach(function (ael) {
-                    if(intersectionFunc(el, ael)) {
-                        usedY.push({
-                            top: ael.realY + ael.realHeight,
-                            bottom: ael.realY
-                        });
+                    if (intersectionFunc(el, ael)) {
+                        usedY.push({ top: ael.realY + ael.realHeight, bottom: ael.realY });
                     }
                 });
+
                 var y = 0;
-                if(usedY.length > 0) {
-                    var segmentPoints = new Array();
+
+                if (usedY.length > 0) {
+                    //Find free segments
+                    var segmentPoints = [];
                     usedY.forEach(function (segment) {
-                        segmentPoints.push({
-                            type: "bottom",
-                            value: segment.bottom
-                        });
-                        segmentPoints.push({
-                            type: "top",
-                            value: segment.top
-                        });
+                        segmentPoints.push({ type: "bottom", value: segment.bottom });
+                        segmentPoints.push({ type: "top", value: segment.top });
                     });
+
+                    segmentPoints.push({ type: "bottom", value: 0 });
+                    segmentPoints.push({ type: "top", value: 0 });
+
                     segmentPoints.sort(function (l, r) {
                         return l.value - r.value;
                     });
-                    var freeSegments = new Array();
+
+                    var freeSegments = [];
                     var count = 0;
-                    for(i = 0; i < segmentPoints.length - 1; i++) {
-                        if(segmentPoints[i].type == "top") {
+                    for (i = 0; i < segmentPoints.length - 1; i++) {
+                        if (segmentPoints[i].type == "top")
                             count++;
-                        } else {
+                        else
                             count--;
-                        }
-                        if(count == 0 && segmentPoints[i + 1].type == "bottom") {
-                            freeSegments.push({
-                                bottom: segmentPoints[i].value,
-                                top: segmentPoints[i + 1].value
-                            });
-                        }
+
+                        if (count == 0 && segmentPoints[i + 1].type == "bottom")
+                            freeSegments.push({ bottom: segmentPoints[i].value, top: segmentPoints[i + 1].value });
                     }
+
+                    //Find suitable free segment
                     var foundPlace = false;
-                    for(var i = 0; i < freeSegments.length; i++) {
-                        if((freeSegments[i].top - freeSegments[i].bottom) > el.realHeight) {
+                    for (var i = 0; i < freeSegments.length; i++) {
+                        if ((freeSegments[i].top - freeSegments[i].bottom) > el.realHeight) {
                             y = freeSegments[i].bottom;
                             foundPlace = true;
                             break;
                         }
                     }
-                    ;
-                    if(!foundPlace) {
+
+                    if (!foundPlace) {
                         y = segmentPoints[segmentPoints.length - 1].value;
                     }
                 }
+
                 el.realY = y;
+
                 arrangedArray.push(el);
             });
+
         }
-        function LayoutContent(timeline, exhibitSize) {
-            var sequencedContent = new Array();
-            var unsequencedContent = new Array();
-            if(timeline.timelines instanceof Array) {
-                timeline.timelines.forEach(function (tl) {
-                    if(tl.Sequence) {
-                        sequencedContent.push(tl);
+
+        function PositionContentAutoManual(manualArray, sequencedArray,
+            unsequencedArray, arrangedArray, tlHFlag, tlHeight, headerPercent, infodotSize) {
+            var arranged = false;
+
+            var max;
+            var tempArrArray;
+            var arrangedManually = 0;
+
+            while (!arranged) {
+                tempArrArray = [];
+
+                //We do so if we are sure that the manual objects do not intersect. 
+                //Otherwise, we need to pass a temporary array to PositionContent separately
+                tempArrArray = tempArrArray.concat(arrangedArray);
+
+                PositionContent(sequencedArray, tempArrArray, function (el, ael) {
+                    return el.left < ael.right;
+                });
+
+                PositionContent(unsequencedArray, tempArrArray, function (el, ael) {
+                    return !(el.left >= ael.right || ael.left >= el.right);
+                });
+
+                if (arrangedArray.length) {
+                    tempArrArray = tempArrArray.slice(arrangedArray.length);
+                }
+
+
+                
+                max = (tlHeight!=undefined)? tlHeight:Number.MIN_VALUE;
+
+                tempArrArray.forEach(function (element) {
+                   if ((element.realY + element.realHeight) > max)
+                       max = element.realY + element.realHeight;
+                });
+
+               
+                if (!tlHFlag)
+                    max = max / (1 - headerPercent);
+
+                if (arrangedArray.length) {
+                    var tmax;
+                    if (arrangedArray[0].Height == undefined)
+                        tmax = arrangedArray[0].realY / arrangedArray[0].offsetY * 100 + arrangedArray[0].realHeight/2;
+                    else
+                        tmax = arrangedArray[0].realY / arrangedArray[0].offsetY * 100;
+                    if (tmax > max)
+                        max = tmax;
+                }
+                arranged = true;
+                
+                for (; ((arrangedManually < manualArray.length) && (arranged == true)) ; arrangedManually++) {
+                    var usedY = [];
+                    tempArrArray.forEach(function (ael) {
+                        if (!(manualArray[arrangedManually].left >= ael.right
+                            || ael.left >= manualArray[arrangedManually].right)) {
+                            usedY.push({ top: ael.realY + ael.realHeight, bottom: ael.realY });
+                        }
+                    });
+
+                    //First try
+                    if (manualArray[arrangedManually].Height === undefined)
+                        max -= infodotSize;
+                    manualArray[arrangedManually].realY = max * manualArray[arrangedManually].offsetY / 100;
+                    if (manualArray[arrangedManually].offsetY !== null && manualArray[arrangedManually].Height) {
+                        manualArray[arrangedManually].height = max * manualArray[arrangedManually].Height;
+                        manualArray[arrangedManually].realHeight = max * manualArray[arrangedManually].Height;
+                    }
+                    if (manualArray[arrangedManually].Height === undefined)
+                        max += infodotSize;
+
+                    //realY
+                    var locMin = manualArray[arrangedManually].realY;
+                    var locMax = Number.MIN_VALUE
+
+                    //Finding the area of intersection
+                    usedY.forEach(function (ael) {
+                        if (!((ael.top <= (manualArray[arrangedManually].realY))
+                            || (manualArray[arrangedManually].realY + manualArray[arrangedManually].realHeight <= ael.bottom))) {
+                            arranged = false;
+                            if (ael.top > locMax)
+                                locMax = ael.top;
+                        }
+                    });
+
+                    //Adding the area size multiplayed by worse case coefficient
+                    if (arranged === false) {
+                        if (manualArray[arrangedManually].Height == undefined)
+                            max += (locMax - locMin + infodotSize) * (1.001 / (Math.max(manualArray[arrangedManually].offsetY, 100.0 - manualArray[arrangedManually].offsetY) / 100));
+                        else
+                            max += (locMax - locMin) * (1.001 / (Math.max(manualArray[arrangedManually].offsetY,
+                                100.0 - manualArray[arrangedManually].offsetY - manualArray[arrangedManually].Height*100) / 100));
+                        arrangedArray.forEach(function (ael) {
+                            if (ael.offsetY !== null && ael.Height) {
+                                ael.realY = max * ael.offsetY / 100;
+                                ael.height = max * ael.Height;
+                                ael.realHeight = ael.height;
+                            }
+                            else {
+                                ael.realY = max * ael.offsetY / 100 - infodotSize/2;
+                            }
+                        });
+                    }
+
+                    if (manualArray[arrangedManually].offsetY !== null && manualArray[arrangedManually].Height) {
+                        manualArray[arrangedManually].realY = max * manualArray[arrangedManually].offsetY / 100;
+                        manualArray[arrangedManually].height = max * manualArray[arrangedManually].Height;
+                        manualArray[arrangedManually].realHeight = max * manualArray[arrangedManually].Height;
                     } else {
-                        unsequencedContent.push(tl);
+                        manualArray[arrangedManually].realY = max * manualArray[arrangedManually].offsetY / 100 - infodotSize/2;
+                    }
+
+                    arrangedArray.push(manualArray[arrangedManually]);
+                }
+
+                //Check that all exhibits are in their timeline
+                for (var i = 0; i < arrangedArray.length; i++){
+                    if (arrangedArray[i].realY < 0)
+                        arrangedArray[i].realY = 0;
+                    if (arrangedArray[i].realY + arrangedArray[i].realHeight > max)
+                        arrangedArray[i].realY = max - arrangedArray[i].realHeight;
+                }
+            }
+
+            if (arrangedArray.length) {
+                max = Number.MIN_VALUE;
+                for (var i = 0; i < arrangedArray.length; i++) {
+                    var tmax;
+                    if (arrangedArray[i].Height === undefined) {
+                        if (arrangedArray[i].offsetY === 0)
+                            tmax = 0;
+                        else
+                            tmax = (arrangedArray[i].realY + arrangedArray[i].realHeight / 2 )/ arrangedArray[i].offsetY * 100;
+                        if (arrangedArray[i].realY + arrangedArray[i].realHeight > tmax)
+                            tmax = arrangedArray[i].realY + arrangedArray[i].realHeight;
+                    }
+                    else {
+                        if (arrangedArray[i].offsetY === 0)
+                            tmax = 0;
+                        else
+                            tmax = arrangedArray[i].realY / arrangedArray[i].offsetY * 100;
+                    }
+                    if (max < tmax)
+                        max = tmax;
+                }
+            }
+                
+            for (var i = 0; i < tempArrArray.length; i++) {
+                arrangedArray.push(tempArrArray[i]);
+            }
+
+            return max;
+        }
+
+        function LayoutContent(timeline, exhibitSize, tlHFlag, tlHeight, headerPercent) {
+            //Prepare arrays for ordered and unordered content
+            var sequencedContent = [];
+            var unsequencedContent = [];
+            var manualContent = [];
+
+            //Prepare measure arrays
+            var arrangedElements = [];
+
+
+            if (timeline.timelines instanceof Array) {
+                timeline.timelines.forEach(function (tl) {
+                    //if y-offset of timeline is user-defined calculate realY
+                    //else prepare it to auto-calculation
+                    if (tl.offsetY != null) {
+                        manualContent.push(tl);
+                    }
+                    else {
+                        if (tl.Sequence)
+                            sequencedContent.push(tl);
+                        else
+                            unsequencedContent.push(tl);
                     }
                 });
             }
-            if(timeline.exhibits instanceof Array) {
+
+            if (timeline.exhibits instanceof Array) {
                 timeline.exhibits.forEach(function (eb) {
                     eb.size = exhibitSize;
                     eb.left = eb.x - eb.size / 2.0;
                     eb.right = eb.x + eb.size / 2.0;
                     eb.realHeight = exhibitSize;
-                    if(eb.left < timeline.left) {
+
+                    if (eb.left < timeline.left) {
                         eb.left = timeline.left;
                         eb.right = eb.left + eb.size;
                         eb.isDeposed = true;
-                    } else if(eb.right > timeline.right) {
+                    } else if (eb.right > timeline.right) {
                         eb.right = timeline.right;
                         eb.left = timeline.right - eb.size;
                         eb.isDeposed = true;
                     }
-                    if(eb.Sequence) {
-                        sequencedContent.push(eb);
-                    } else {
-                        unsequencedContent.push(eb);
+
+                    //if y-offset of exhibit is user-defined calculate realY
+                    //else prepare it to auto-calculation
+                    if (eb.offsetY != null) {
+                        manualContent.push(eb);
+                    }
+                    else {
+                        if (eb.Sequence)
+                            sequencedContent.push(eb);
+                        else
+                            unsequencedContent.push(eb);
                     }
                 });
             }
+
             sequencedContent.sort(function (l, r) {
                 return l.Sequence - r.Sequence;
             });
-            var arrangedElements = new Array();
-            PositionContent(sequencedContent, arrangedElements, function (el, ael) {
-                return el.left < ael.right;
-            });
-            PositionContent(unsequencedContent, arrangedElements, function (el, ael) {
-                return !(el.left >= ael.right || ael.left >= el.right);
-            });
+
+            var max = PositionContentAutoManual(manualContent, sequencedContent,
+                unsequencedContent, arrangedElements, tlHFlag, tlHeight, headerPercent, exhibitSize)
+
             var min = Number.MAX_VALUE;
-            var max = Number.MIN_VALUE;
-            arrangedElements.forEach(function (element) {
-                if(element.realY < min) {
-                    min = element.realY;
-                }
-                if((element.realY + element.realHeight) > max) {
-                    max = element.realY + element.realHeight;
-                }
-            });
-            if(arrangedElements.length == 0) {
-                max = 0;
-                min = 0;
+            
+            for (var i = 0; i < arrangedElements.length; i++) {
+                if ((arrangedElements[i].realY) < min)
+                    min = arrangedElements[i].realY;
             }
-            return {
-                max: max,
-                min: min
-            };
+            
+            if (manualContent.length != 0)
+                min = 0;
+
+            return { min: min, max: max };
         }
-        function LayoutChildTimelinesOnly(timeline) {
-            var arrangedElements = new Array();
-            if(timeline.timelines instanceof Array) {
-                PositionContent(timeline.timelines, arrangedElements, function (el, ael) {
-                    return !(el.left >= ael.right || ael.left >= el.right);
+
+        function LayoutChildTimelinesOnly(timeline, tlHFlag, headerPercent) {
+
+            //Prepare measure arrays
+            var arrangedElements = [];
+            var autoContent = [];
+            var manualContent = [];
+
+            if (timeline.timelines instanceof Array) {
+                timeline.timelines.forEach(function (tl) {
+                    //if y-offset of timeline is user-defined calculate realY
+                    //else prepare it to auto-calculation
+                    if (tl.offsetY != null) {
+                        manualContent.push(tl);
+                    }
+                    else {
+                        autoContent.push(tl);
+                    }
                 });
+
+                PositionContentAutoManual(manualContent, [], autoContent,
+                    arrangedElements, tlHFlag, timeline.height, headerPercent);
             }
+
             var min = Number.MAX_VALUE;
             var max = Number.MIN_VALUE;
-            arrangedElements.forEach(function (element) {
-                if(element.realY < min) {
-                    min = element.realY;
-                }
-                if((element.realY + element.realHeight) > max) {
-                    max = element.realY + element.realHeight;
-                }
-            });
-            if(arrangedElements.length == 0) {
+
+            for (var i = 0; i < arrangedElements.length; i++) {
+                if (arrangedElements[i].realY < min)
+                    min = arrangedElements[i].realY;
+                if ((arrangedElements[i].realY + arrangedElements[i].realHeight) > max)
+                    max = arrangedElements[i].realY + arrangedElements[i].realHeight;
+            }
+            
+            if (arrangedElements.length == 0) {
                 max = 0;
                 min = 0;
             }
-            return {
-                max: max,
-                min: min
-            };
+
+            return { max: max, min: min };
         }
+
         function Scale(timeline, scale, mctx) {
-            if(scale < 1) {
+            if (scale < 1)
                 throw "Only extending of content is allowed";
-            }
+
             timeline.height *= scale;
             timeline.realHeight = timeline.height + 2 * timeline.heightEps;
             timeline.titleRect = GenerateTitleObject(timeline.height, timeline, mctx);
-            if(timeline.timelines instanceof Array) {
+
+            if (timeline.timelines instanceof Array) {
                 timeline.timelines.forEach(function (tl) {
                     tl.realY *= scale;
-                    if(!tl.AspectRatio) {
+                    if (!tl.AspectRatio)
                         Scale(tl, scale, mctx);
-                    }
                 });
             }
-            if(timeline.exhibits instanceof Array) {
+
+            if (timeline.exhibits instanceof Array) {
                 timeline.exhibits.forEach(function (eb) {
                     eb.realY *= scale;
                 });
             }
         }
-        function Arrange(timeline) {
-            timeline.y = timeline.realY + timeline.heightEps;
-            if(timeline.exhibits instanceof Array) {
+
+        function Arrange(timeline, measureContext) {
+            if (timeline.offsetY!==null && timeline.Height) 
+                timeline.y = timeline.realY;
+            else
+                timeline.y = timeline.realY + timeline.heightEps;
+
+            if (timeline.exhibits instanceof Array) {
                 timeline.exhibits.forEach(function (infodot) {
                     infodot.y = infodot.realY + infodot.size / 2.0 + timeline.y;
                 });
             }
-            if(timeline.timelines instanceof Array) {
+
+            if (timeline.timelines instanceof Array) {
                 timeline.timelines.forEach(function (tl) {
+                    if (tl.offsetY !== null && tl.Height) {
+                        var exhibitSize = CalcInfodotSize(timeline);
+                        var headerPercent = CZ.Settings.timelineHeaderSize + 2 * CZ.Settings.timelineHeaderMargin;
+                        var res = LayoutContent(tl, exhibitSize, true, tl.height,
+                            headerPercent);
+                        while ((res.max - res.min) > timeline.height && exhibitSize > timeline.width / 20.0) {
+                            exhibitSize /= 1.5;
+                            res = LayoutContent(timeline, exhibitSize, true, tl.height, headerPercent);
+                        }
+                    }    
                     tl.realY += timeline.y;
-                    Arrange(tl);
+
+                    tl.height = Math.max(tl.height, CZ.Settings.timelineMinAspect/4 * (tl.right - tl.left));
+                    tl.height = Math.min(tl.height, (tl.right - tl.left)*3 / CZ.Settings.timelineMinAspect);
+                        
+                    Arrange(tl, measureContext);
                 });
             }
+            var titleObject = GenerateTitleObject(timeline.height, timeline, measureContext);
+            timeline.titleRect = titleObject;
         }
+
         function CalcInfodotSize(timeline) {
             return (timeline.right - timeline.left) / 20.0;
         }
+
         function GenerateTitleObject(tlHeight, timeline, measureContext) {
             var tlW = timeline.right - timeline.left;
+
             measureContext.font = "100pt " + CZ.Settings.timelineHeaderFontName;
             var size = measureContext.measureText(timeline.title);
             var height = CZ.Settings.timelineHeaderSize * tlHeight;
             var width = height * size.width / 100.0;
+
             var margin = Math.min(tlHeight, tlW) * CZ.Settings.timelineHeaderMargin;
-            if(width + 2 * margin > tlW) {
+
+            if (width + 2 * margin > tlW) {
                 width = tlW - 2 * margin;
                 height = width * 100.0 / size.width;
             }
+
             return {
-                width: width - 1.25 * height,
+                width: width - 2.1 * height,
                 height: height,
                 marginTop: tlHeight - height - margin,
                 marginLeft: margin,
-                bboxWidth: width + 2 * margin - 1.25 * height,
+                bboxWidth: width + 2 * margin - 2.1 * height,
                 bboxHeight: height + 2 * margin
             };
         }
         Layout.GenerateTitleObject = GenerateTitleObject;
+
         function Convert(parent, timeline) {
+            //Creating timeline
             var tlColor = GetTimelineColor(timeline);
             var t1 = CZ.VCContent.addTimeline(parent, "layerTimelines", 't' + timeline.id, {
                 isBuffered: timeline.timelines instanceof Array,
@@ -361,70 +627,91 @@ var CZ;
                 strokeStyle: tlColor,
                 regime: timeline.Regime,
                 endDate: timeline.endDate,
-                opacity: 0
+                FromIsCirca: timeline.FromIsCirca || false,
+                ToIsCirca: timeline.ToIsCirca || false,
+                opacity: 0,
+                backgroundUrl: timeline.backgroundUrl,
+                aspectRatio: timeline.aspectRatio,
+                offsetY: timeline.offsetY,
+                Height: timeline.Height
             });
-            if(timeline.exhibits instanceof Array) {
+
+            //Creating Infodots
+            if (timeline.exhibits instanceof Array) {
                 timeline.exhibits.forEach(function (childInfodot) {
                     var contentItems = [];
-                    if(typeof childInfodot.contentItems !== 'undefined') {
+                    if (typeof childInfodot.contentItems !== 'undefined') {
                         contentItems = childInfodot.contentItems;
-                        for(var i = 0; i < contentItems.length; ++i) {
+
+                        for (var i = 0; i < contentItems.length; ++i) {
                             contentItems[i].guid = contentItems[i].id;
                         }
                     }
+
                     var infodot1 = CZ.VCContent.addInfodot(t1, "layerInfodots", 'e' + childInfodot.id, (childInfodot.left + childInfodot.right) / 2.0, childInfodot.y, 0.8 * childInfodot.size / 2.0, contentItems, {
                         isBuffered: false,
                         guid: childInfodot.id,
                         title: childInfodot.title,
+                        offsetY: childInfodot.offsetY,
                         date: childInfodot.time,
+                        isCirca: childInfodot.IsCirca,
                         opacity: 1
                     });
                 });
             }
-            if(timeline.timelines instanceof Array) {
+
+            //Filling child timelines
+            if (timeline.timelines instanceof Array) {
                 timeline.timelines.forEach(function (childTimeLine) {
                     Convert(t1, childTimeLine);
                 });
             }
         }
+
         function GetTimelineColor(timeline) {
-            if(timeline.Regime == "Cosmos") {
+            if (timeline.Regime == "Cosmos") {
                 return "rgba(152, 108, 157, 1.0)";
-            } else if(timeline.Regime == "Earth") {
+            } else if (timeline.Regime == "Earth") {
                 return "rgba(81, 127, 149, 1.0)";
-            } else if(timeline.Regime == "Life") {
+            } else if (timeline.Regime == "Life") {
                 return "rgba(73, 150, 73, 1.0)";
-            } else if(timeline.Regime == "Pre-history") {
+            } else if (timeline.Regime == "Pre-history") {
                 return "rgba(237, 145, 50, 1.0)";
-            } else if(timeline.Regime == "Humanity") {
+            } else if (timeline.Regime == "Humanity") {
                 return "rgba(212, 92, 70, 1.0)";
             } else {
-                return "rgba(255, 255, 255, 0.5)";
+                // Return null to allow the settings configuration to choose color.
+                return null;
             }
         }
+
         Layout.FindChildTimeline = function (timeline, id, recursive) {
             var result = undefined;
-            if(timeline && timeline.timelines instanceof Array) {
+
+            if (timeline && timeline.timelines instanceof Array) {
                 var n = timeline.timelines.length;
-                for(var i = 0; i < n; i++) {
+                for (var i = 0; i < n; i++) {
                     var childTimeline = timeline.timelines[i];
-                    if(childTimeline.id == id) {
+                    if (childTimeline.id == id) {
+                        // timeline was found
                         result = childTimeline;
                         break;
                     } else {
-                        if(recursive == true) {
+                        // if recursive mode is on, then search timeline through children of current child timeline
+                        if (recursive == true) {
                             result = Layout.FindChildTimeline(childTimeline, id, recursive);
-                            if(result != undefined) {
+                            if (result != undefined)
                                 break;
-                            }
                         }
                     }
                 }
             }
+
             return result;
         };
+
         function GetVisibleFromTimeline(timeline, vcph) {
-            if(timeline) {
+            if (timeline) {
                 var vp = vcph.virtualCanvas("getViewport");
                 var width = timeline.right - timeline.left;
                 var scaleX = vp.visible.scale * width / vp.width;
@@ -432,26 +719,42 @@ var CZ;
                 return new CZ.Viewport.VisibleRegion2d(timeline.left + (timeline.right - timeline.left) / 2.0, timeline.y + timeline.height / 2.0, Math.max(scaleX, scaleY));
             }
         }
+
         function LoadTimeline(root, rootTimeline) {
             root.beginEdit();
             Convert(root, rootTimeline);
             root.endEdit(true);
         }
+
         function Load(root, timeline) {
-            if(timeline) {
+            if (timeline) {
+                //Transform timeline start and end dates
                 Prepare(timeline);
-                var measureContext = (document.createElement("canvas")).getContext('2d');
+                //Measure child content for each timiline in tree
+                var measureContext = document.createElement("canvas").getContext('2d');
                 LayoutTimeline(timeline, 0, measureContext);
-                Arrange(timeline);
+
+                //Calculating final placement of the data
+                Arrange(timeline, measureContext);
+
+                //Load timline to Virtual Canvas
                 LoadTimeline(root, timeline);
             }
         }
         Layout.Load = Load;
+
+        /*
+        ---------------------------------------------------------------------------
+        DYNAMIC LAYOUT
+        ---------------------------------------------------------------------------
+        */
+        // takes a metadata timeline (FromTimeUnit, FromYear, FromMonth, FromDay, ToTimeUnit, ToYear, ToMonth, ToDay)
+        // and returns a corresponding scenegraph (x, y, width, height)
+        // todo: remove dependency on virtual canvas (vc)
         function generateLayout(tmd, tsg) {
-            try  {
-                if(!tmd.AspectRatio) {
+            try {
+                if (!tmd.AspectRatio)
                     tmd.height = tsg.height;
-                }
                 var root = new CZ.VCContent.CanvasRootElement(tsg.vc, undefined, "__root__", -Infinity, -Infinity, Infinity, Infinity);
                 Load(root, tmd);
                 return root.children[0];
@@ -459,15 +762,16 @@ var CZ;
                 console.log("exception in [nikita's layout]: " + msg);
             }
         }
+
+        // converts a scenegraph element in absolute coords to relative coords
         function convertRelativeToAbsoluteCoords(el, delta) {
-            if(!delta) {
+            if (!delta)
                 return;
-            }
-            if(typeof el.y !== 'undefined') {
+            if (typeof el.y !== 'undefined') {
                 el.y += delta;
                 el.newY += delta;
             }
-            if(typeof el.baseline !== 'undefined') {
+            if (typeof el.baseline !== 'undefined') {
                 el.baseline += delta;
                 el.newBaseline += delta;
             }
@@ -475,45 +779,53 @@ var CZ;
                 convertRelativeToAbsoluteCoords(child, delta);
             });
         }
+
+        // shifts a scenegraph element in absolute coords by delta
         function shiftAbsoluteCoords(el, delta) {
-            if(!delta) {
+            if (!delta)
                 return;
-            }
-            if(typeof el.newY !== 'undefined') {
+            if (typeof el.newY !== 'undefined')
                 el.newY += delta;
-            }
-            if(typeof el.newBaseline !== 'undefined') {
+            if (typeof el.newBaseline !== 'undefined')
                 el.newBaseline += delta;
-            }
             el.children.forEach(function (child) {
                 shiftAbsoluteCoords(child, delta);
             });
         }
+
+        // calculates the net force excerted on each child timeline and infodot
+        // after expansion of child timelines to fit the newly added content
         function calculateForceOnChildren(tsg) {
             var eps = tsg.height / 10;
+
             var v = [];
-            for(var i = 0, el; i < tsg.children.length; i++) {
+            for (var i = 0, el; i < tsg.children.length; i++) {
                 el = tsg.children[i];
-                if(el.type && (el.type === "timeline" || el.type === "infodot")) {
+                if (el.type && (el.type === "timeline" || el.type === "infodot")) {
                     el.force = 0;
                     v.push(el);
                 }
             }
+
             v.sort(function (el, ael) {
                 return el.newY - ael.newY;
-            });
-            for(var i = 0, el; i < v.length; i++) {
+            }); // inc order of y
+
+            for (var i = 0, el; i < v.length; i++) {
                 el = v[i];
-                if(el.type && el.type === "timeline") {
-                    if(el.delta) {
+                if (el.type && el.type === "timeline") {
+                    if (el.delta) {
                         var l = el.x;
                         var r = el.x + el.width;
                         var b = el.y + el.newHeight + eps;
-                        for(var j = i + 1; j < v.length; j++) {
+                        for (var j = i + 1; j < v.length; j++) {
                             var ael = v[j];
-                            if(ael.x > l && ael.x < r || ael.x + ael.width > l && ael.x + ael.width < r || ael.x + ael.width > l && ael.x + ael.width === 0 && r === 0) {
-                                if(ael.y < b) {
+                            if (ael.x > l && ael.x < r || ael.x + ael.width > l && ael.x + ael.width < r || ael.x + ael.width > l && ael.x + ael.width === 0 && r === 0) {
+                                // ael intersects (l, r)
+                                if (ael.y < b) {
+                                    // ael overlaps with el
                                     ael.force += el.delta;
+
                                     l = Math.min(l, ael.x);
                                     r = Math.max(r, ael.x + ael.width);
                                     b = ael.y + ael.newHeight + el.delta + eps;
@@ -526,31 +838,33 @@ var CZ;
                 }
             }
         }
+
         function animateElement(elem) {
             var duration = CZ.Settings.canvasElementAnimationTime;
             var args = [];
-            if(elem.fadeIn == false && typeof elem.animation === 'undefined') {
+
+            if (elem.fadeIn == false && typeof elem.animation === 'undefined') {
                 elem.height = elem.newHeight;
                 elem.y = elem.newY;
-                if(elem.baseline) {
+
+                if (elem.baseline)
                     elem.baseline = elem.newBaseline;
-                }
             }
-            if(elem.newY != elem.y && !elem.id.match("__header__")) {
+
+            if (elem.newY != elem.y && !elem.id.match("__header__"))
                 args.push({
                     property: "y",
                     startValue: elem.y,
                     targetValue: elem.newY
                 });
-            }
-            if(elem.newHeight != elem.height && !elem.id.match("__header__")) {
+            if (elem.newHeight != elem.height && !elem.id.match("__header__"))
                 args.push({
                     property: "height",
                     startValue: elem.height,
                     targetValue: elem.newHeight
                 });
-            }
-            if(elem.opacity != 1 && elem.fadeIn == false) {
+
+            if (elem.opacity != 1 && elem.fadeIn == false) {
                 args.push({
                     property: "opacity",
                     startValue: elem.opacity,
@@ -558,144 +872,171 @@ var CZ;
                 });
                 duration = CZ.Settings.canvasElementFadeInTime;
             }
-            if(isLayoutAnimation == false || args.length == 0) {
+
+            if (isLayoutAnimation == false || args.length == 0)
                 duration = 0;
-            }
+
             initializeAnimation(elem, duration, args);
-            if(elem.fadeIn == true) {
-                for(var i = 0; i < elem.children.length; i++) {
-                    if(elem.children[i].fadeIn == true) {
+
+            // first animate resize/transition of buffered content. skip new content
+            if (elem.fadeIn == true) {
+                for (var i = 0; i < elem.children.length; i++)
+                    if (elem.children[i].fadeIn == true)
                         animateElement(elem.children[i]);
-                    }
-                }
-            } else {
-                for(var i = 0; i < elem.children.length; i++) {
+            } else
+                for (var i = 0; i < elem.children.length; i++)
                     animateElement(elem.children[i]);
-                }
-            }
         }
+
         function initializeAnimation(elem, duration, args) {
             var startTime = (new Date()).getTime();
+
             elem.animation = {
                 isAnimating: true,
                 duration: duration,
                 startTime: startTime,
                 args: args
             };
-            if(typeof Layout.animatingElements[elem.id] === 'undefined') {
+
+            // add elem to hash map
+            if (typeof Layout.animatingElements[elem.id] === 'undefined') {
                 Layout.animatingElements[elem.id] = elem;
                 Layout.animatingElements.length++;
             }
+
+            // calculates new animation frame of element
             elem.calculateNewFrame = function () {
                 var curTime = (new Date()).getTime();
                 var t;
-                if(elem.animation.duration > 0) {
-                    t = Math.min(1.0, (curTime - elem.animation.startTime) / elem.animation.duration);
-                } else {
+
+                if (elem.animation.duration > 0)
+                    t = Math.min(1.0, (curTime - elem.animation.startTime) / elem.animation.duration); //projecting current time to the [0;1] interval of the animation parameter
+                else
                     t = 1.0;
-                }
+
                 t = CZ.ViewportAnimation.animationEase(t);
-                for(var i = 0; i < args.length; i++) {
-                    if(typeof elem[args[i].property] !== 'undefined') {
+
+                for (var i = 0; i < args.length; i++) {
+                    if (typeof elem[args[i].property] !== 'undefined')
                         elem[elem.animation.args[i].property] = elem.animation.args[i].startValue + t * (elem.animation.args[i].targetValue - elem.animation.args[i].startValue);
-                    }
                 }
-                if(t == 1.0) {
+
+                if (t == 1.0) {
                     elem.animation.isAnimating = false;
                     elem.animation.args = [];
+
                     delete Layout.animatingElements[elem.id];
                     Layout.animatingElements.length--;
-                    if(elem.fadeIn == false) {
+
+                    if (elem.fadeIn == false)
                         elem.fadeIn = true;
-                    }
-                    for(var i = 0; i < elem.children.length; i++) {
-                        if(typeof elem.children[i].animation === 'undefined') {
+
+                    for (var i = 0; i < elem.children.length; i++)
+                        if (typeof elem.children[i].animation === 'undefined')
                             animateElement(elem.children[i]);
-                        }
-                    }
+
                     return;
                 }
             };
         }
+
+        // utiltity function for debugging
         function numberWithCommas(n) {
             var parts = n.toString().split(".");
             return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (parts[1] ? "." + parts[1] : "");
         }
+
+        // src = metadata tree (responsedump.txt + isBuffered)
+        // dest = scenegraph tree (tree of CanvasTimelines)
+        // returns void.
+        // mutates scenegraph tree (dest) by appending missing data from metadata tree (src).
+        // dest timelines can be in 1 of 3 states
+        // 1. No Metadata.  (isBuffered == false)
+        // 2. All Metadata. (isBuffered == false)
+        // 3. All Content.  (isBuffered == true)
         function merge(src, dest) {
-            if(src.id === dest.guid) {
+            if (src.id === dest.guid) {
                 var srcChildTimelines = (src.timelines instanceof Array) ? src.timelines : [];
                 var destChildTimelines = [];
-                for(var i = 0; i < dest.children.length; i++) {
-                    if(dest.children[i].type && dest.children[i].type === "timeline") {
+                for (var i = 0; i < dest.children.length; i++)
+                    if (dest.children[i].type && dest.children[i].type === "timeline")
                         destChildTimelines.push(dest.children[i]);
-                    }
-                }
-                if(srcChildTimelines.length === destChildTimelines.length) {
+
+                if (srcChildTimelines.length === destChildTimelines.length) {
                     dest.isBuffered = dest.isBuffered || (src.timelines instanceof Array);
+
+                    // cal bbox (top, bottom) for child timelines and infodots
                     var origTop = Number.MAX_VALUE;
                     var origBottom = Number.MIN_VALUE;
-                    for(var i = 0; i < dest.children.length; i++) {
-                        if(dest.children[i].type && (dest.children[i].type === "timeline" || dest.children[i].type === "infodot")) {
-                            if(dest.children[i].newY < origTop) {
+                    for (var i = 0; i < dest.children.length; i++) {
+                        if (dest.children[i].type && (dest.children[i].type === "timeline" || dest.children[i].type === "infodot")) {
+                            if (dest.children[i].newY < origTop)
                                 origTop = dest.children[i].newY;
-                            }
-                            if(dest.children[i].newY + dest.children[i].newHeight > origBottom) {
+                            if (dest.children[i].newY + dest.children[i].newHeight > origBottom)
                                 origBottom = dest.children[i].newY + dest.children[i].newHeight;
-                            }
                         }
                     }
+
+                    // merge child timelines
                     dest.delta = 0;
-                    for(var i = 0; i < srcChildTimelines.length; i++) {
+                    for (var i = 0; i < srcChildTimelines.length; i++)
                         merge(srcChildTimelines[i], destChildTimelines[i]);
-                    }
+
+                    // check if child timelines have expanded
                     var haveChildTimelineExpanded = false;
-                    for(var i = 0; i < destChildTimelines.length; i++) {
-                        if(destChildTimelines[i].delta) {
+                    for (var i = 0; i < destChildTimelines.length; i++)
+                        if (destChildTimelines[i].delta)
                             haveChildTimelineExpanded = true;
-                        }
-                    }
-                    if(haveChildTimelineExpanded) {
-                        for(var i = 0; i < destChildTimelines.length; i++) {
-                            if(destChildTimelines[i].delta) {
+
+                    if (haveChildTimelineExpanded) {
+                        for (var i = 0; i < destChildTimelines.length; i++)
+                            if (destChildTimelines[i].delta)
                                 destChildTimelines[i].newHeight += destChildTimelines[i].delta;
-                            }
-                        }
+
+                        // shift all timelines and infodots above and below a expanding timeline
                         calculateForceOnChildren(dest);
-                        for(var i = 0; i < dest.children.length; i++) {
-                            if(dest.children[i].force) {
+                        for (var i = 0; i < dest.children.length; i++)
+                            if (dest.children[i].force)
                                 shiftAbsoluteCoords(dest.children[i], dest.children[i].force);
-                            }
-                        }
+
+                        // cal bbox (top, bottom) for child timelines and infodots after expansion
                         var top = Number.MAX_VALUE;
                         var bottom = Number.MIN_VALUE;
                         var bottomElementName = "";
-                        for(var i = 0; i < dest.children.length; i++) {
-                            if(dest.children[i].type && (dest.children[i].type === "timeline" || dest.children[i].type === "infodot")) {
-                                if(dest.children[i].newY < top) {
+                        for (var i = 0; i < dest.children.length; i++) {
+                            if (dest.children[i].type && (dest.children[i].type === "timeline" || dest.children[i].type === "infodot")) {
+                                if (dest.children[i].newY < top)
                                     top = dest.children[i].newY;
-                                }
-                                if(dest.children[i].newY + dest.children[i].newHeight > bottom) {
+                                if (dest.children[i].newY + dest.children[i].newHeight > bottom) {
                                     bottom = dest.children[i].newY + dest.children[i].newHeight;
                                     bottomElementName = dest.children[i].title;
                                 }
                             }
                         }
+
+                        // update title pos after expansion
                         dest.delta = Math.max(0, (bottom - top) - (origBottom - origTop));
+
+                        // hide animating text
+                        // TODO: find the better way to fix text shacking bug if possible
                         dest.titleObject.newY += dest.delta;
                         dest.titleObject.newBaseline += dest.delta;
                         dest.titleObject.opacity = 0;
                         dest.titleObject.fadeIn = false;
                         delete dest.titleObject.animation;
-                        if(bottom > dest.titleObject.newY) {
+
+                        // assert: child content cannot exceed parent
+                        if (bottom > dest.titleObject.newY) {
                             var msg = bottomElementName + " EXCEEDS " + dest.title + ".\n" + "bottom: " + numberWithCommas(bottom) + "\n" + "   top: " + numberWithCommas(dest.titleObject.newY) + "\n";
                             console.log(msg);
                         }
-                        for(var i = 1; i < dest.children.length; i++) {
+
+                        for (var i = 1; i < dest.children.length; i++) {
                             var el = dest.children[i];
-                            for(var j = 1; j < dest.children.length; j++) {
+                            for (var j = 1; j < dest.children.length; j++) {
                                 var ael = dest.children[j];
-                                if(el.id !== ael.id) {
-                                    if(!(ael.x <= el.x && ael.x + ael.width <= el.x || ael.x >= el.x + el.width && ael.x + ael.width >= el.x + el.width || ael.newY <= el.newY && ael.newY + ael.newHeight <= el.newY || ael.newY >= el.newY + el.newHeight && ael.newY + ael.newHeight >= el.newY + el.newHeight)) {
+                                if (el.id !== ael.id) {
+                                    if (!(ael.x <= el.x && ael.x + ael.width <= el.x || ael.x >= el.x + el.width && ael.x + ael.width >= el.x + el.width || ael.newY <= el.newY && ael.newY + ael.newHeight <= el.newY || ael.newY >= el.newY + el.newHeight && ael.newY + ael.newHeight >= el.newY + el.newHeight)) {
                                         var msg = el.title + " OVERLAPS " + ael.title + ".\n";
                                         console.log(msg);
                                     }
@@ -703,19 +1044,21 @@ var CZ;
                             }
                         }
                     }
-                } else if(srcChildTimelines.length > 0 && destChildTimelines.length === 0) {
+                } else if (srcChildTimelines.length > 0 && destChildTimelines.length === 0) {
                     var t = generateLayout(src, dest);
                     var margin = Math.min(t.width, t.newHeight) * CZ.Settings.timelineHeaderMargin;
-                    dest.delta = Math.max(0, t.newHeight - dest.newHeight);
+                    dest.delta = Math.max(0, t.newHeight - dest.newHeight); // timelines can only grow, never shrink
+
+                    // replace dest.children (timelines, infodots, titleObject) with matching t.children
                     dest.children.splice(0);
-                    for(var i = 0; i < t.children.length; i++) {
+                    for (var i = 0; i < t.children.length; i++)
                         dest.children.push(t.children[i]);
-                    }
                     dest.titleObject = dest.children[0];
+
                     dest.isBuffered = dest.isBuffered || (src.timelines instanceof Array);
-                    for(var i = 0; i < dest.children.length; i++) {
+
+                    for (var i = 0; i < dest.children.length; i++)
                         convertRelativeToAbsoluteCoords(dest.children[i], dest.newY);
-                    }
                 } else {
                     dest.delta = 0;
                 }
@@ -723,13 +1066,15 @@ var CZ;
                 throw "error: Cannot merge timelines. Src and dest node ids differ.";
             }
         }
+
         function Merge(src, dest) {
-            if(typeof CZ.Authoring !== 'undefined' && CZ.Authoring.isActive) {
+            // skip dynamic layout during active authoring session
+            if (typeof CZ.Authoring !== 'undefined' && CZ.Authoring.isActive)
                 return;
-            }
-            if(src && dest) {
-                if(dest.id === "__root__") {
-                    src.AspectRatio = 10;
+
+            if (src && dest) {
+                if (dest.id === "__root__") {
+                    src.AspectRatio = src.aspectRatio || 10;
                     var t = generateLayout(src, dest);
                     convertRelativeToAbsoluteCoords(t, 0);
                     dest.children.push(t);
